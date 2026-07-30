@@ -136,7 +136,7 @@ CIFAR10/
 └── README.md
 ```
 
-> **路径命名规范**：`model_tag = args.model.replace("_", "")，例如 `simple_cnn → simplecnn`，`resnet18 → resnet18`。所有任务/拓展的输出/权重目录均带模型后缀，避免多模型并行时互相覆盖。
+> **路径命名规范**：`model_tag = args.model.replace("_", "")`，例如 `simple_cnn → simplecnn`，`resnet18 → resnet18`。所有任务/拓展的输出/权重目录均带模型后缀，避免多模型并行时互相覆盖。
 
 ---
 
