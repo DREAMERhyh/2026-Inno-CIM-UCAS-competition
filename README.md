@@ -431,7 +431,7 @@ python task1_layer_analysis.py \
 | `--output_dir` | str | `"./outputs/task2_simplecnn"` | — | **注意：该参数默认值实际不生效，实际 save_dir_output 由 f-string `./outputs/task2_{model_tag}/{args.mode}` 动态拼接决定** |
 | `--patience` | int | `None` | — | 早停耐心轮数 |
 
-> **特别注意**：`--batch_size 参数**未在 argparse 中声明**，主函数通过 `args.batch_size if hasattr(args, "batch_size") and args.batch_size else 128` 兜底为 128。
+> **特别注意**：`--batch_size ` 参数**未在 argparse 中声明**，主函数通过 `args.batch_size if hasattr(args, "batch_size") and args.batch_size else 128` 兜底为 128。
 
 ### 8.3 动态路径规则
 
@@ -488,11 +488,11 @@ python task2_nat.py --mode scratch --model resnet18 \
 
 ### 9.1 任务简介
 
-在 NAT-Scratch 基础上叠加**三项互补增强方案，通过消融实验逐步验证：
+在 NAT-Scratch 基础上叠加**三项互补增强方案**，通过消融实验逐步验证：
 
 | 方案 | 类型 | 说明 |
 |---|---|---|
-| **A 架构增强 | 架构 | GAP 后 + FeatureCalibration(128→64→128 MLP + 残差连接)补偿 fc 层失真；最坏情况退化为恒等 |
+| **A 架构增强** | 架构 | GAP 后 + FeatureCalibration(128→64→128 MLP + 残差连接)补偿 fc 层失真；最坏情况退化为恒等 |
 | **B 分层加权 α** | 训练策略 | conv1/2 ∈ [-0.15, 0.15](轻失真)；conv3/4 ∈ [-0.30, 0.30](标准)；fc 每 batch 随机选 ±0.3(强失真) |
 | **C 非对称偏置** | 采样策略 | 70% 概率正向 α(破坏力更强)，30% 概率负向 α |
 
@@ -647,10 +647,11 @@ python task_extension1_network_comparison.py \
 2. `layer_shift_nonlinearity.csv` / `layer_shift_gaussian.csv`
 3. `error_accumulation_nonlinearity.png` / `error_accumulation_gaussian.png`
 4. `histogram_{浅/深层}_gaussian.png`(σ=0 vs 0.20 分布对比)
-5. `accuracy_comparison_{m}.png`(**双横轴**：下轴 α -0.3~0.3，上轴 σ 0.00~0.30 线性映射，非线性红实圈 / 高斯蓝虚方)
+5. `accuracy_comparison_{m}.png`(**双横轴**：下轴 α -0.3\~0.3，上轴 σ 0.00\~0.30 线性映射，非线性红实圈 / 高斯蓝虚方)
 6. `error_accumulation_comparison_{m}.png`(可比强度 α=0.2 vs σ=0.15 跨层 cos 对比)
 
 若同时存在 simple_cnn + exp2：
+
 7. `robustness_transfer_comparison.png`(1×2 子图，左 Nonlinearity / 右 Gaussian，SimpleCNN 蓝虚 / Exp2 红实)
 
 ### 11.4 典型运行命令
@@ -679,9 +680,9 @@ python task_extension2_noise_vs_nonlinearity.py \
 
 ### 12.1 研究问题
 
-CiM 芯片信号路径：输入激活 → MAC(非线性失真)→ ADC(QDQ 量化)。联合误差顺序严格遵循「先 nonlinearity，后 quantize_error(对应物理路径)。研究：
+CiM 芯片信号路径：输入激活 → MAC(非线性失真)→ ADC(QDQ 量化)。联合误差顺序严格遵循「先 nonlinearity，后 quantize_error(对应物理路径)」。研究：
 1. 单独量化(32/8/6/4/3/2 bit 精度衰减)；
-2. α×bit 网格下的**超加性叠加恶化；
+2. α×bit 网格下的**超加性叠加恶化**；
 3. 任务3 Exp2 鲁棒模型在联合压力下是否仍保持增益。
 
 ### 12.2 命令行参数表
@@ -704,9 +705,9 @@ CiM 芯片信号路径：输入激活 → MAC(非线性失真)→ ADC(QDQ 量化
 ### 12.4 超加性判定规则(脚本终端自动输出)
 
 设 `drop_n` = 单独非线性跌幅，`drop_q` = 单独量化跌幅，`drop_joint` = 联合跌幅：
-- `drop_joint > 1.05 × (drop_n + drop_q)` → **Super-Additive(恶化，两误差共振)
-- 0.95×和 ~ 1.05× → Linear(线性叠加可求和即可)
-- `< 0.95× → Sub-Additive(相互抑制)
+- `drop_joint > 1.05 × (drop_n + drop_q)` → **Super-Additive(恶化，两误差共振)**
+- `0.95×`和 `~ 1.05×` → Linear(线性叠加可求和即可)
+- `< 0.95×` → Sub-Additive(相互抑制)
 
 ### 12.5 输出文件(`{output_dir}/` 根目录)
 1. `{m}_quantization_only.csv`(列 num_bits / accuracy / loss)
