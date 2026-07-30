@@ -1,0 +1,11 @@
+{
+    "best_test_acc": 92.09,
+    "final_train_loss": 0.002323,
+    "final_test_loss": 0.419053,
+    "final_train_acc": 99.978,
+    "final_test_acc": 91.99,
+    "total_epochs": 100,
+    "start_epoch": 0,
+    "resumed": false,
+    "best_epoch": 81
+}

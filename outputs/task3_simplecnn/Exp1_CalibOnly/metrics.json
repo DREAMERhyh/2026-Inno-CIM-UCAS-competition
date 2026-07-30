@@ -1,0 +1,13 @@
+{
+    "best_test_acc": 87.19,
+    "best_epoch": 112,
+    "total_epochs": 120,
+    "final_train_loss": 0.08892351867010197,
+    "final_test_loss": 0.4446311032772064,
+    "final_train_acc": 97.0713141025641,
+    "final_test_acc": 87.0,
+    "use_calibration": true,
+    "layerwise_alpha": false,
+    "asymmetric_sampling": false,
+    "exp_name": "Exp1_CalibOnly"
+}

@@ -1,0 +1,18 @@
+{
+    "best_test_acc": 86.49,
+    "best_epoch": 107,
+    "total_epochs": 120,
+    "final_train_loss": 0.17672800964269883,
+    "final_test_loss": 0.42707161803245547,
+    "final_train_acc": 94.35096153846153,
+    "final_test_acc": 86.42,
+    "alpha_mode": "random",
+    "alpha_range": [
+        -0.3,
+        0.3
+    ],
+    "alpha_fixed": 0.3,
+    "mode_nat_train_mode": null,
+    "nat_train_mode": "scratch",
+    "checkpoint_used": null
+}

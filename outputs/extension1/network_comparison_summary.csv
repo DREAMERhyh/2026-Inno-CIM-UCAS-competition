@@ -1,0 +1,3 @@
+model_name,total_params,clean_accuracy,acc_at_alpha_0.3,acc_drop_at_0.3
+simple_cnn,242474,84.9,55.08,29.82
+resnet18,11173962,92.09,17.08,75.01

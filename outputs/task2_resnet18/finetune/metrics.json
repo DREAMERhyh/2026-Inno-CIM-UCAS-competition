@@ -1,0 +1,18 @@
+{
+    "best_test_acc": 91.99,
+    "best_epoch": 77,
+    "total_epochs": 80,
+    "final_train_loss": 0.0023698902156842777,
+    "final_test_loss": 0.45222675552368163,
+    "final_train_acc": 99.9639423076923,
+    "final_test_acc": 91.3,
+    "alpha_mode": "random",
+    "alpha_range": [
+        -0.3,
+        0.3
+    ],
+    "alpha_fixed": 0.3,
+    "mode_nat_train_mode": null,
+    "nat_train_mode": "finetune",
+    "checkpoint_used": "./checkpoints/resnet18/best_model.pth"
+}

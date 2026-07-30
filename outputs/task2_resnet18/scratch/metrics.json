@@ -1,0 +1,16 @@
+{
+    "best_test_acc": 92.27,
+    "best_epoch": 93,
+    "total_epochs": 120,
+    "final_train_loss": 0.002069580914245214,
+    "final_test_loss": 0.41231464767456055,
+    "final_train_acc": 99.96995192307692,
+    "final_test_acc": 92.13,
+    "alpha_mode": "random",
+    "alpha_range": [
+        -0.3,
+        0.3
+    ],
+    "alpha_fixed": 0.3,
+    "mode_nat_train_mode": null
+}
