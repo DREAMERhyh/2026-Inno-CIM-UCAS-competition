@@ -35,61 +35,65 @@ $$y = \alpha \cdot \tilde{x}^3 + (1-\alpha) \cdot \tilde{x}, \quad \tilde{x} = \
 
 ```
 CIFAR10/
-├── data/                                        # CIFAR-10 数据集(自动下载或手动放)
+├── data/                                           # CIFAR-10 数据集(自动下载或手动放)
 │   └── cifar-10-batches-py/
-├── models/                                      # 模型定义
+├── models/                                         # 模型定义
 │   ├── __init__.py
-│   ├── simple_cnn.py                         # SimpleCNN (~0.24M，基线小模型)
-│   ├── robust_cnn.py                         # RobustCNN + FeatureCalibration 残差校准
-│   ├── resnet.py                             # CIFAR-10 适配版 ResNet-18 (~11.17M)
-│   └── vgg11.py                              # CIFAR-10 轻量适配版 VGG-11 (~9.2M)
-├── utils/                                       # 通用工具模块
+│   ├── simple_cnn.py                               # SimpleCNN (~0.24M，基线小模型)
+│   ├── robust_cnn.py                               # RobustCNN + FeatureCalibration 残差校准
+│   ├── resnet.py                                   # CIFAR-10 适配版 ResNet-18 (~11.17M)
+│   └── vgg11.py                                    # CIFAR-10 轻量适配版 VGG-11 (~9.2M)
+├── utils/                                          # 通用工具模块
 │   ├── __init__.py
-│   ├── data_loader.py                          # CIFAR-10 数据加载 + 增强(root="./data" 硬编码)
-│   ├── trainer.py                            # 通用 Trainer(支持早停/断点续训/英文图表)
-│   ├── nonlinearity.py                       # 三次非线性失真注入(任务1/2/3核心)
-│   ├── perturbation.py                       # 统一扰动接口(非线性+高斯，拓展2)
-│   └── quantization.py                     # QDQ 量化+联合误差注入(拓展3)
-├── checkpoints/                             # 训练权重(dict 格式含 epoch/model/optim/best_acc)
-│   ├── {model_name}/                        # 干净训练权重：simple_cnn / resnet18 / vgg11
+│   ├── data_loader.py                              # CIFAR-10 数据加载 + 增强(root="./data" 硬编码)
+│   ├── trainer.py                                  # 通用 Trainer(支持早停/断点续训/英文图表)
+│   ├── nonlinearity.py                             # 三次非线性失真注入(任务1/2/3核心)
+│   ├── perturbation.py                             # 统一扰动接口(非线性+高斯，拓展2)
+│   └── quantization.py                             # QDQ 量化+联合误差注入(拓展3)
+├── checkpoints/                                    # 训练权重(dict 格式含 epoch/model/optim/best_acc)
+│   ├── {model_name}/                               # 干净训练权重：simple_cnn / resnet18 / vgg11
 │   │   └── best_model.pth
-│   ├── nat_{mode}_{model_tag}/              # NAT 权重(mode ∈ {finetune, scratch})
+│   ├── nat_{mode}_{model_tag}/                     # NAT 权重(mode ∈ {finetune, scratch})
 │   │   └── best_model.pth
-│   ├── Exp1_CalibOnly_{model_tag}/         # 任务3 Exp1(仅方案A)
-│   ├── Exp2_Calib+Layerwise_{model_tag}/    # 任务3 Exp2(方案A+B)
-│   └── Exp3_FullRobust_{model_tag}/         # 任务3 Exp3(方案A+B+C)
+│   ├── Exp1_CalibOnly_{model_tag}/                 # 任务3 Exp1(仅方案A)
+│   ├── Exp2_Calib+Layerwise_{model_tag}/           # 任务3 Exp2(方案A+B)
+│   └── Exp3_FullRobust_{model_tag}/                # 任务3 Exp3(方案A+B+C)
 ├── outputs/
-│   ├── {model_name}/                        # train.py 干净训练产物(曲线/混淆/指标)
-│   ├── task1_{model_tag}/                   # 任务1：α敏感性+层偏移
+│   ├── {model_name}/                               # train.py 干净训练产物(曲线/混淆/指标)
+│   ├── task1_{model_tag}/                          # 任务1：α敏感性+层偏移
 │   │   ├── alpha_sensitivity.csv
 │   │   ├── accuracy_vs_alpha.png
 │   │   ├── layer_distribution_shift.csv
 │   │   ├── error_accumulation.png
-│   │   ├── histogram_{layer1}.png             # (浅/深两个观测层)alpha=0 vs 0.3 直方图
-│   │   └── histogram_{layer2}.png
-│   ├── task2_{model_tag}/                    # 任务2：NAT 训练产物
+│   │   ├── histogram_{layer1}.png                  # (浅/深两个观测层)alpha=0 vs 0.3 直方图
+│   │   ├── histogram_{layer2}.png
+│   │   └── task1_{model_tag}_summary.md            # 任务1 总结文档
+│   ├── task2_{model_tag}/                          # 任务2：NAT 训练产物
 │   │   ├── finetune/
 │   │   │   ├── training_curves.png
 │   │   │   ├── confusion_matrix.png
 │   │   │   ├── metrics.json
 │   │   │   ├── alpha_sensitivity.csv
 │   │   │   └── accuracy_vs_alpha_comparison.png
-│   │   └── scratch/                         # (同 finetune/ 结构)
-│   ├── task3_{model_tag}/                   # 任务3：鲁棒性消融
+│   │   ├── scratch/                                # (同 finetune/ 结构)
+│   │   └── task2_{model_tag}_summary.md            # 任务2 总结文档
+│   ├── task3_{model_tag}/                          # 任务3：鲁棒性消融
 │   │   ├── Exp1_CalibOnly/
 │   │   ├── Exp2_Calib+Layerwise/
 │   │   ├── Exp3_FullRobust/
-│   │   ├── ablation_summary.csv            # (仅 --exp all)
-│   │   └── ablation_comparison.png       # (仅 --exp all)
-│   ├── extension1/                          # 拓展1：多模型架构对比
-│   │   ├── {m}_alpha_sensitivity.csv       # 每个 clean 模型
-│   │   ├── {m}_nat_alpha_sensitivity.csv   # (可选 NAT)
+│   │   ├── ablation_summary.csv                    # (仅 --exp all)
+│   │   ├── ablation_comparison.png                 # (仅 --exp all)
+│   │   └── task3_{model_tag}_summary.md            # 任务3 总结文档
+│   ├── extension1/                                 # 拓展1：多模型架构对比
+│   │   ├── {m}_alpha_sensitivity.csv               # 每个 clean 模型
+│   │   ├── {m}_nat_alpha_sensitivity.csv           # (可选 NAT)
 │   │   ├── accuracy_comparison.png
 │   │   ├── accuracy_drop_comparison.png
 │   │   ├── robustness_vs_params.png
-│   │   └── network_comparison_summary.csv
-│   ├── extension2_{model_tag}/               # 拓展2：高斯噪声 vs 非线性(默认带_simplecnn后缀)
-│   │   ├── {model_instance}/               # simple_cnn / exp2 / resnet18 / vgg11 子目录
+│   │   ├── network_comparison_summary.csv
+│   │   └── extension1_summary.md                   # 拓展1 总结文档
+│   ├── extension2_{model_tag}/                     # 拓展2：高斯噪声 vs 非线性(默认带_simplecnn后缀)
+│   │   ├── {model_instance}/                       # simple_cnn / exp2 / resnet18 / vgg11 子目录
 │   │   │   ├── nonlinearity_sensitivity.csv
 │   │   │   ├── gaussian_sensitivity.csv
 │   │   │   ├── layer_shift_nonlinearity.csv
@@ -99,15 +103,17 @@ CIFAR10/
 │   │   │   ├── histogram_{*}_gaussian.png
 │   │   │   ├── accuracy_comparison_{m}.png
 │   │   │   └── error_accumulation_comparison_{m}.png
-│   │   └── robustness_transfer_comparison.png # (simple_cnn + exp2 同时存在)
-│   └── extension3_{model_tag}/           # 拓展3：量化+非线性联合(默认带_simplecnn后缀)
+│   │   ├── robustness_transfer_comparison.png      # (simple_cnn + exp2 同时存在)
+│   │   └── extension2_{model_tag}_summary.md       # 拓展2 总结文档
+│   └── extension3_{model_tag}/                     # 拓展3：量化+非线性联合(默认带_simplecnn后缀)
 │       ├── {m}_quantization_only.csv
 │       ├── {m}_joint_error.csv
 │       ├── quantization_only_{m}.png
 │       ├── joint_error_heatmap_{m}.png
 │       ├── joint_vs_alone_comparison.png
 │       ├── robustness_under_joint_error.png
-│       └── joint_error_summary.csv
+│       ├── joint_error_summary.csv
+│       └── extension3_{model_tag}_summary.md       # 拓展3 总结文档
 ├── train.py
 ├── evaluate.py
 ├── task1_sensitivity_analysis.py
@@ -229,10 +235,10 @@ pip install -r requirements.txt
 | `--device` | str | 自动(有CUDA用cuda否则cpu) | `cuda`, `cpu` | 计算设备 |
 | `--num_workers` | int | `2` | — | DataLoader 工作线程 |
 | `--seed` | int | `42` | — | 随机种子 |
-| `--patience` | int | `None` | — | 早停耐心轮数(不设则不启用早停 |
+| `--patience` | int | `None` | — | 早停耐心轮数(不设则不启用早停) |
 
 #### 输入/输出路径
-- **输入**：无强制输入(首次训练无需 checkpoint；续训传 `--resume`
+- **输入**：无强制输入(首次训练无需 checkpoint；续训传 `--resume` )。。
 - **输出目录**：`./checkpoints/{args.model}/best_model.pth (权重) ；`./outputs/{args.model}/`(图表)
   - `training_curves.png`(Loss / Acc 双子图，红星标最佳 epoch)
   - `confusion_matrix.png`(干净测试集混淆矩阵，10×10 热力图)
@@ -363,7 +369,7 @@ python task1_sensitivity_analysis.py \
 |---|---|---|
 | SimpleCNN | conv1 / conv2 / conv3 / conv4 / fc | conv1 + conv4 |
 | ResNet-18 | layer1 / layer2 / layer3 / layer4 + fc | layer1 + layer4 |
-| VGG-11 | features[7] / features[14] / features[21] / features[28] + fc | features[7] (=block2 末) + features[28] (=block5 末 |
+| VGG-11 | features[7] / features[14] / features[21] / features[28] + fc | features[7] (=block2 末) + features[28] (=block5 末) |
 
 #### 输出文件(`--output_dir` 下)
 1. `layer_distribution_shift.csv`(列：`alpha, layer_name, RME, cosine_similarity`)
@@ -394,7 +400,7 @@ python task1_layer_analysis.py \
 ### 8.1 任务简介
 
 训练阶段在每个 batch 的 Conv2d/Linear 输入端动态注入随机或固定 α 的非线性失真("在噪声中学习")，验证阶段干净推理(α=0)，对比：
-- **Finetune(微调)**：从干净预训练权重出发(~40 epochs，计算量小；
+- **Finetune(微调)**：从干净预训练权重出发(~80 epochs，计算量小)。
 - **Scratch(从头训练)**：随机初始化，全程带失真训练(~120 epochs，鲁棒性上限更高)。
 
 ### 8.2 命令行参数表
@@ -455,7 +461,7 @@ python task2_nat.py --mode finetune --model simple_cnn
 
 # Finetune + 固定 α=0.3
 python task2_nat.py --mode finetune --model simple_cnn \
-    --alpha_mode fixed --alpha_fixed 0.3 --epochs 40
+    --alpha_mode fixed --alpha_fixed 0.3 --epochs 80
 
 # Scratch(120 epochs，lr=0.01，random α
 python task2_nat.py --mode scratch --model simple_cnn
@@ -482,7 +488,7 @@ python task2_nat.py --mode scratch --model resnet18 \
 | **B 分层加权 α** | 训练策略 | conv1/2 ∈ [-0.15, 0.15](轻失真)；conv3/4 ∈ [-0.30, 0.30](标准)；fc 每 batch 随机选 ±0.3(强失真) |
 | **C 非对称偏置** | 采样策略 | 70% 概率正向 α(破坏力更强)，30% 概率负向 α |
 
-三种方案的组合映射(`--exp` 到 4 种配置：
+三种方案的组合映射(`--exp` 到 4 种配置)：
 
 | `--exp` | 实验名称 | use_calibration(A) | layerwise_alpha(B) | asymmetric_sampling(C) |
 |---|---|---|---|---|
@@ -505,7 +511,7 @@ python task2_nat.py --mode scratch --model resnet18 \
 | `--device` | str | 自动 | cuda / cpu | 设备 |
 | `--num_workers` | int | `2` | — | workers |
 | `--seed` | int | `42` | — | 种子 |
-| `--output_dir` | str | `"./outputs/task3_simplecnn"` | — | (推荐带模型后缀，实际子目录按 `{output_dir}/{exp_name}_{model_tag}` |
+| `--output_dir` | str | `"./outputs/task3_simplecnn"` | — | (推荐带模型后缀，实际子目录按 `{output_dir}/{exp_name}_{model_tag}` 动态拼接决定) |
 | `--patience` | int | `None` | — | 早停耐心轮数 |
 
 ### 9.3 动态路径规则
@@ -519,7 +525,7 @@ save_dir_output_exp = f"{args.output_dir}/{exp_name}_{model_tag}"
 
 NAT-Scratch 基线读取路径硬编码为 `./outputs/task2_simplecnn/scratch/alpha_sensitivity.csv`(若不存在跳过基线对比图)。
 
-### 9.4 输出文件(每个实验子目录(`Exp1_CalibOnly_{model_tag}/` 等结构一致)：
+### 9.4 输出文件(每个实验子目录(`Exp1_CalibOnly_{model_tag}/` 等结构一致))：
 - `training_curves.png` / `confusion_matrix.png` / `metrics.json`(含三个开关字段 + exp_name)/ `alpha_sensitivity.csv` / `accuracy_vs_alpha_comparison.png`(当前实验 vs NAT-Scratch 基线)
 
 `--exp all` 额外在 `--output_dir` 根目录生成：
@@ -571,7 +577,7 @@ python task3_robust.py --exp 3 --epochs 100 --lr 0.005 --patience 15
 
 ### 10.3 效率优化
 
-首次加载权重后深拷贝 `clean_state_dict`(CPU.clone()，后续每个 α 直接 `load_state_dict` 内存重载，省去重复磁盘 IO。
+首次加载权重后深拷贝 `clean_state_dict`(CPU.clone()，后续每个 α 直接 `load_state_dict` 内存重载，省去重复磁盘 IO)。
 
 ### 10.4 输出文件(`./outputs/extension1/`)
 1. `{model_name}_alpha_sensitivity.csv`(每个 clean 模型)
@@ -621,7 +627,7 @@ python task_extension1_network_comparison.py \
 | `--models` | str | `"simple_cnn,exp2,resnet18"` | 支持名列表，支持 `simple_cnn` / `exp2`(→任务3 Exp2 鲁棒CNN，ckpt 硬编码 `./checkpoints/Exp2_Calib+Layerwise_simplecnn/best_model.pth`)/ `vgg11` / `resnet18` |
 | `--pert_types` | str | `"nonlinearity,gaussian"` | `nonlinearity`(三次失真) / `gaussian`(加性噪声) |
 | `--alpha_values` | str | `"-0.3,-0.2,-0.1,0.0,0.1,0.2,0.3"` | α 列表 |
-| `--noise_levels` | str | `"0.05,0.10,0.15,0.20,0.25,0.30"` | σ 列表(自动补 σ=0.0 基线 |
+| `--noise_levels` | str | `"0.05,0.10,0.15,0.20,0.25,0.30"` | σ 列表(自动补 σ=0.0 基线) |
 | `--num_samples` | int | `500` | 层偏移固定样本数 |
 | `--batch_size` | int | `128` | Batch Size |
 | `--device` | str | 自动 | cuda / cpu |
@@ -666,7 +672,7 @@ python task_extension2_noise_vs_nonlinearity.py \
 ### 12.1 研究问题
 
 CiM 芯片信号路径：输入激活 → MAC(非线性失真)→ ADC(QDQ 量化)。联合误差顺序严格遵循「先 nonlinearity，后 quantize_error(对应物理路径)。研究：
-1. 单独量化(32/8/6/4/3/2 bit 精度衰减；
+1. 单独量化(32/8/6/4/3/2 bit 精度衰减)；
 2. α×bit 网格下的**超加性叠加恶化；
 3. 任务3 Exp2 鲁棒模型在联合压力下是否仍保持增益。
 
@@ -691,15 +697,15 @@ CiM 芯片信号路径：输入激活 → MAC(非线性失真)→ ADC(QDQ 量化
 
 设 `drop_n` = 单独非线性跌幅，`drop_q` = 单独量化跌幅，`drop_joint` = 联合跌幅：
 - `drop_joint > 1.05 × (drop_n + drop_q)` → **Super-Additive(恶化，两误差共振)
-- 0.95×和 ~ 1.05× → Linear(线性叠加可求和即可
-- `< 0.95× → Sub-Additive(相互抑制
+- 0.95×和 ~ 1.05× → Linear(线性叠加可求和即可)
+- `< 0.95× → Sub-Additive(相互抑制)
 
 ### 12.5 输出文件(`{output_dir}/` 根目录)
 1. `{m}_quantization_only.csv`(列 num_bits / accuracy / loss)
 2. `{m}_joint_error.csv`(列 alpha / num_bits / accuracy / loss)
 3. `quantization_only_{m}.png`(bit 曲线 + 32-bit 红星参考)
 4. `joint_error_heatmap_{m}.png`(RdYlGn 色图，Y 轴 bit 从上到下递减，单元格中心加粗标数值)
-5. `joint_vs_alone_comparison.png`(1×N 子图固定 target_bit：非线-only 32-bit 蓝实圈 + quant-only 绿虚水平线 + 联合(target_bit红实方块)
+5. `joint_vs_alone_comparison.png`(1×N 子图固定 target_bit：非线-only 32-bit 蓝实圈 + quant-only 绿虚水平线 + 联合(target_bit红实方块))
 6. `robustness_under_joint_error.png`(固定 target_bit 多模型 α 曲线对比，style_map：simple_cnn 蓝虚圈 / exp2 红实方 / resnet18 绿点划三角)
 7. `joint_error_summary.csv`(error_type ∈ nonlinearity_only / quantization_only / joint 三类合并)
 

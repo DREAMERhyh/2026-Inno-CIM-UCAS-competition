@@ -1,0 +1,18 @@
+{
+    "best_test_acc": 89.9,
+    "best_epoch": 65,
+    "total_epochs": 80,
+    "final_train_loss": 0.0031435930326831744,
+    "final_test_loss": 0.519683788394928,
+    "final_train_acc": 99.9599358974359,
+    "final_test_acc": 89.44,
+    "alpha_mode": "random",
+    "alpha_range": [
+        -0.3,
+        0.3
+    ],
+    "alpha_fixed": 0.3,
+    "mode_nat_train_mode": null,
+    "nat_train_mode": "finetune",
+    "checkpoint_used": "./checkpoints/vgg11/best_model.pth"
+}
