@@ -55,9 +55,9 @@ CIFAR10/
 │   │   └── best_model.pth
 │   ├── nat_{mode}_{model_tag}/                     # NAT 权重(mode ∈ {finetune, scratch})
 │   │   └── best_model.pth
-│   ├── Exp1_CalibOnly_{model_tag}/                 # 任务3 Exp1(仅方案A)
-│   ├── Exp2_Calib+Layerwise_{model_tag}/           # 任务3 Exp2(方案A+B)
-│   └── Exp3_FullRobust_{model_tag}/                # 任务3 Exp3(方案A+B+C)
+│   ├── Exp1_CalibOnly_simple_cnn/                 # 任务3 Exp1(仅方案A),only simple_cnn
+│   ├── Exp2_Calib+Layerwise_simple_cnn/           # 任务3 Exp2(方案A+B),only simple_cnn
+│   └── Exp3_FullRobust_simple_cnn/                # 任务3 Exp3(方案A+B+C),only simple_cnn
 ├── outputs/
 │   ├── {model_name}/                               # train.py 干净训练产物(曲线/混淆/指标)
 │   ├── task1_{model_tag}/                          # 任务1：α敏感性+层偏移
