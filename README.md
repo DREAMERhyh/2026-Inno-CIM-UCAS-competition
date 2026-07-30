@@ -84,14 +84,22 @@ CIFAR10/
 │   │   ├── ablation_summary.csv                    # (仅 --exp all)
 │   │   ├── ablation_comparison.png                 # (仅 --exp all)
 │   │   └── task3_{model_tag}_summary.md            # 任务3 总结文档
-│   ├── extension1/                                 # 拓展1：多模型架构对比
+│   ├── extension1_clean_vs_scratch/                # 拓展1：多模型架构对比,干净 vs NAT Scratch
 │   │   ├── {m}_alpha_sensitivity.csv               # 每个 clean 模型
 │   │   ├── {m}_nat_alpha_sensitivity.csv           # (可选 NAT)
 │   │   ├── accuracy_comparison.png
 │   │   ├── accuracy_drop_comparison.png
 │   │   ├── robustness_vs_params.png
 │   │   ├── network_comparison_summary.csv
-│   │   └── extension1_summary.md                   # 拓展1 总结文档
+│   │   └── extension1_clean_vs_scratch_summary.md  # 拓展1 干净 vs NAT Scratch 总结文档
+│   ├── extension1_clean_vs_finetune/               # 拓展1：多模型架构对比,干净 vs NAT Finetune
+│   │   ├── {m}_alpha_sensitivity.csv               # 每个 clean 模型
+│   │   ├── {m}_nat_alpha_sensitivity.csv           # (可选 NAT)
+│   │   ├── accuracy_comparison.png
+│   │   ├── accuracy_drop_comparison.png
+│   │   ├── robustness_vs_params.png
+│   │   ├── network_comparison_summary.csv
+│   │   └── extension1_clean_vs_finetune_summary.md # 拓展1 干净 vs NAT Finetune 总结文档
 │   ├── extension2_{model_tag}/                     # 拓展2：高斯噪声 vs 非线性(默认带_simplecnn后缀)
 │   │   ├── {model_instance}/                       # simple_cnn / exp2 / resnet18 / vgg11 子目录
 │   │   │   ├── nonlinearity_sensitivity.csv
