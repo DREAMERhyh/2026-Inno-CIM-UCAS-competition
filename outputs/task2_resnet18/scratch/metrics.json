@@ -12,5 +12,7 @@
         0.3
     ],
     "alpha_fixed": 0.3,
-    "mode_nat_train_mode": null
+    "mode_nat_train_mode": null,
+    "nat_train_mode": "scratch",
+    "checkpoint_used": null
 }
