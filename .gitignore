@@ -1,5 +1,6 @@
 checkpoints/
 data/
+ucas-cod-lab-report/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
