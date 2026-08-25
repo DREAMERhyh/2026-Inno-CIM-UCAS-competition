@@ -736,3 +736,86 @@ python task_extension3_joint_analysis.py \
     --target_bit 3
 ```
 
+---
+
+## 13. 第二阶段优化：α扫描范围扩展（Extension 4: Alpha Wide Scan）
+
+### 13.1 实验目的
+
+将α扫描范围从训练区间[-0.3, 0.3]扩展至[-0.6, 0.6]，评估NAT模型在训练分布外的**外推鲁棒性**。具体而言：
+- 训练区间|α|≤0.3：验证扫描结果与task1/2/3的一致性（曲线连续性检查）；
+- 外推区|α|>0.3：评估NAT模型（finetune / scratch / Exp2 robust）在未见过的α强度下是否仍能保持精度，对比clean模型的退化速度。
+
+外推区精度衰减斜率 vs 训练区内衰减斜率的对比意义：
+- **衰减缓**（外推区斜率 ≤ 训练区斜率 × 1.5）：模型泛化鲁棒性好，非线性失真容忍度高；
+- **衰减陡**（外推区斜率 > 训练区斜率 × 1.5）：鲁棒性仅限训练分布内，外推时快速失效。
+
+两种结果都有研究价值：前者指导鲁棒模型设计，后者揭示NAT的过拟合边界。
+
+### 13.2 命令行参数
+
+| 参数 | 类型 | 默认值 | 含义 |
+|------|------|--------|------|
+| `--models` | str | `"simple_cnn,vgg11,resnet18"` | 逗号分隔模型列表 |
+| `--weight_types` | str | `"clean,nat_scratch,nat_finetune,exp2_robust"` | 逗号分隔权重类型；exp2_robust仅对simple_cnn有效 |
+| `--alphas` | str | `"-0.6,-0.5,...,0.6"`(15点) | 逗号分隔α列表 |
+| `--output_dir` | str | `"./outputs/extension4_alpha_wide/"` | 输出目录 |
+| `--batch_size` | int | `128` | 推理batch size |
+| `--seed` | int | `42` | 随机种子 |
+| `--device` | str | 自动 | cuda/cpu |
+| `--checkpoint_root` | str | `"./checkpoints"` | checkpoint根目录 |
+
+### 13.3 输入：复用的checkpoint清单
+
+| 模型 | weight_type | checkpoint路径 |
+|------|-------------|---------------|
+| simple_cnn | clean | `./checkpoints/simple_cnn/best_model.pth` |
+| simple_cnn | nat_scratch | `./checkpoints/nat_scratch_simplecnn/best_model.pth` |
+| simple_cnn | nat_finetune | `./checkpoints/nat_finetune_simplecnn/best_model.pth` |
+| simple_cnn | exp2_robust | `./checkpoints/Exp2_Calib+Layerwise_simplecnn/best_model.pth` |
+| vgg11 | clean | `./checkpoints/vgg11/best_model.pth` |
+| vgg11 | nat_scratch | `./checkpoints/nat_scratch_vgg11/best_model.pth` |
+| vgg11 | nat_finetune | `./checkpoints/nat_finetune_vgg11/best_model.pth` |
+| resnet18 | clean | `./checkpoints/resnet18/best_model.pth` |
+| resnet18 | nat_scratch | `./checkpoints/nat_scratch_resnet18/best_model.pth` |
+| resnet18 | nat_finetune | `./checkpoints/nat_finetune_resnet18/best_model.pth` |
+
+### 13.4 输出文件
+
+| 文件 | 说明 |
+|------|------|
+| `alpha_wide_scan_summary.csv` | 汇总CSV，6列：model, weight_type, alpha, accuracy, loss, is_extrapolation |
+| `simple_cnn_alpha_wide.png` | simple_cnn的4条曲线（含exp2_robust），竖虚线标α=±0.3 |
+| `vgg11_alpha_wide.png` | vgg11的3条曲线 |
+| `resnet18_alpha_wide.png` | resnet18的3条曲线 |
+| `all_models_alpha_wide.png` | 3子图跨模型对比，共享y轴 |
+
+### 13.5 典型运行命令
+
+```bash
+# 默认：全部扫描
+python task_extension4_alpha_wide_scan.py
+
+# 仅部分模型
+python task_extension4_alpha_wide_scan.py \
+    --models "simple_cnn,resnet18" \
+    --weight_types "clean,nat_scratch" \
+    --output_dir ./outputs/extension4_alpha_wide/
+
+# 自定义α扫描点
+python task_extension4_alpha_wide_scan.py \
+    --alphas "-0.6,-0.4,-0.2,0.0,0.2,0.4,0.6" \
+    --output_dir ./outputs/extension4_alpha_wide/
+
+# 重定位checkpoint目录
+python task_extension4_alpha_wide_scan.py \
+    --checkpoint_root /path/to/checkpoints
+```
+
+### 13.6 结果解读指引
+
+1. **外推区斜率分析**：对每个(model, weight_type)组合，分别计算外推区(|α|>0.3)和训练区(|α|≤0.3)的精度衰减斜率（可通过CSV的`is_extrapolation`列区分）。若外推区斜率明显大于训练区，说明模型在外推时快速失效。
+2. **NAT防护边界**：对比同一模型的clean与NAT（finetune/scratch/exp2_robust）曲线：若NAT在外推区的衰减明显缓于clean，说明NAT带来了真实泛化增益；若仅训练区内有改善但外推区与clean重合，说明NAT的鲁棒性仅限训练分布。
+3. **Exp2 Robust跨模型迁移**：simple_cnn的exp2_robust（RobustCNN + FeatureCalibration）在外推区是否优于普通NAT，验证架构级鲁棒增强是否改善外推能力。
+4. **模型架构对比**：通过`all_models_alpha_wide.png`的3子图共享y轴，直观比较simple_cnn/vgg11/resnet18三种架构在外推区的鲁棒性差异。
+
