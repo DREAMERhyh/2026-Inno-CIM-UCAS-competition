@@ -1,0 +1,4 @@
+model,maxpool_count,bits_2,bits_3,bits_4,bits_6,bits_8,gain_4bit_vs_8bit
+simple_cnn,2,9.8,17.81,41.24,53.19,54.92,-13.68
+vgg11,5,9.98,42.97,43.27,37.13,36.74,6.53
+resnet18,0,9.73,17.28,17.38,17.14,16.99,0.39

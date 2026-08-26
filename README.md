@@ -819,3 +819,85 @@ python task_extension4_alpha_wide_scan.py \
 3. **Exp2 Robust跨模型迁移**：simple_cnn的exp2_robust（RobustCNN + FeatureCalibration）在外推区是否优于普通NAT，验证架构级鲁棒增强是否改善外推能力。
 4. **模型架构对比**：通过`all_models_alpha_wide.png`的3子图共享y轴，直观比较simple_cnn/vgg11/resnet18三种架构在外推区的鲁棒性差异。
 
+---
+
+## 14. 第二阶段优化：Dithering效应机理解析（Extension 5: Dithering Mechanism）
+
+### 14.1 实验目的
+
+前期实验（拓展3）发现VGG-11干净模型在α=+0.3非线性失真下，4bit QDQ量化精度（43.27%）显著高于8bit（36.74%），即"Dithering效应"——低位量化噪声反而提升精度，且该效应为VGG-11所独有。本脚本对该现象进行定量机理解析，检验三个假设：
+
+**H1（经典dither去相关假设）**：随机噪声打破非线性失真的确定性错误映射，产生倒U形响应（最优噪声剂量存在）。判别逻辑：若组(b)存在最优σ使精度显著超过8bit无噪基线，支持H1。
+
+**H2（分布重塑假设）**：量化改变激活分布形态（特别是分类器输入特征），使决策边界更有利。判别逻辑：H2激活统计中，4bit与8bit的激活分布均值/标准差/峰度存在显著差异，且该差异与精度变化关联。
+
+**H3（MaxPool交互假设）**：MaxPool的局部最大值筛选机制与随机噪声交互，使VGG-11（5次MaxPool）独享Dithering增益。判别逻辑：组(d)中若Dithering增益与MaxPool次数正相关（VGG-11 > SimpleCNN > ResNet-18），支持H3；若三架构增益相近，排除H3。
+
+### 14.2 命令行参数
+
+| 参数 | 类型 | 默认值 | 含义 |
+|------|------|--------|------|
+| `--model` | str | `"vgg11"` | 主分析模型（组a/b/c/样本级/H2用） |
+| `--alpha` | float | `0.3` | 固定非线性强度α |
+| `--bits` | str | `"2,3,4,5,6,8"` | 组(a) bits扫描范围 |
+| `--noise_types` | str | `"gaussian,uniform"` | 组(b)噪声类型 |
+| `--noise_levels` | str | `"0.005,0.01,0.02,0.05,0.1,0.2,0.3,0.5"` | 组(b)噪声强度 |
+| `--output_dir` | str | `"./outputs/extension5_dithering_vgg11/"` | 输出目录 |
+| `--batch_size` | int | `128` | 推理batch size |
+| `--seed` | int | `42` | 随机种子 |
+| `--device` | str | 自动 | cuda/cpu |
+| `--checkpoint_root` | str | `"./checkpoints"` | checkpoint根目录 |
+| `--ext3_root` | str | `"./outputs"` | extension3输出根目录（组d读取用） |
+
+### 14.3 输入：复用checkpoint
+
+| 模型 | checkpoint路径 | 用途 |
+|------|---------------|------|
+| VGG-11 | `./checkpoints/vgg11/best_model.pth` | 组(a)(b)(c)/样本级/H2主分析 |
+| SimpleCNN | `./checkpoints/simple_cnn/best_model.pth` | 组(d)通过extension3 CSV复用 |
+| ResNet-18 | `./checkpoints/resnet18/best_model.pth` | 组(d)通过extension3 CSV复用 |
+
+注：组(d)不直接加载模型，而是从extension3既有CSV读取数据，无需额外推理。
+
+### 14.4 输出文件
+
+| 文件 | 说明 |
+|------|------|
+| `group_a_bits_scan.csv` | 组(a) bits扫描结果（num_bits/accuracy/loss/dose） |
+| `group_b_noise_injection.csv` | 组(b) 噪声注入结果（noise_type/noise_std/accuracy/loss/dose） |
+| `group_c_pure_noise.csv` | 组(c) 纯噪声结果（等效4bit剂量） |
+| `flip_statistics.csv` | 样本翻转统计（saved/killed/net_gain） |
+| `activation_stats.csv` | H2激活统计（conv1/classifier输入的双观测点统计量） |
+| `arch_dithering_summary.csv` | 组(d) 三架构各bits精度汇总及4bit增益vs8bit |
+| `bits_accuracy_curve.png` | 组(a) bits-精度曲线，标注36.74/43.27锚点 |
+| `dose_accuracy_curve.png` | 组(a/b/c)同轴剂量-精度曲线 |
+| `margin_distribution.png` | 三组样本margin分布叠加图 |
+| `arch_comparison_bits.png` | 组(d)三架构bits-精度叠加图，标注MaxPool次数 |
+
+### 14.5 典型运行命令
+
+```bash
+# 默认：完整分析（VGG-11）
+python task_extension5_dithering_mechanism.py
+
+# 自定义扫描范围
+python task_extension5_dithering_mechanism.py \
+    --bits "2,3,4,6,8" \
+    --noise_levels "0.01,0.05,0.1,0.2,0.5" \
+    --output_dir ./outputs/extension5_dithering_vgg11/
+
+# 指定extension3输出根目录
+python task_extension5_dithering_mechanism.py \
+    --ext3_root /path/to/outputs
+```
+
+### 14.6 结果解读指引
+
+1. **倒U形响应的意义**：组(b)中若精度随噪声强度先升后降（倒U形），说明存在最优噪声剂量——dithering去相关发挥最大效用。最优剂量点对应H1的最强证据；若精度单调下降，则随机性不能解释4bit增益。
+
+2. **margin分布两种形态**：被救回样本的margin若集中于0附近的浅负区（-5~0），说明Dithering仅救回分类边界附近的模糊样本——"边缘样本救回"假说成立。若存在深负margin（< -10）被救回，则Dithering具备系统性纠错能力（更强的结论）。
+
+3. **三架构对照与MaxPool关联**：若Dithering增益排序为VGG-11（5次MaxPool）> SimpleCNN（2次）> ResNet-18（0次），支持H3——MaxPool的局部最大值筛选放大了量化噪声的随机扰动，使dithering效果随MaxPool次数增加而增强。若增益排序与此无关，则需寻找其他机理。
+
+4. **纯噪声 vs 4bit QDQ对比**：组(c)中若纯噪声也能复现类似增益，随机性是主因（支持H1）；若只有QDQ有增益，量化的特异性作用（如动态范围压缩）是主因（支持H2方向）。
+

@@ -1,0 +1,4 @@
+condition,accuracy,saved_vs_8bit,killed_vs_8bit,net_gain_vs_8bit,saved_vs_clean,killed_vs_clean,net_gain_vs_clean,always_correct,always_wrong,total_samples
+4bit_QDQ,43.27,860,207,653,210,4863,-4653,3467,5466,10000
+8bit+gaussian_opt,36.81,53,46,7,198,5497,-5299,3628,6273,10000
+8bit+uniform_opt,36.55,44,63,-19,198,5523,-5325,3611,6282,10000
