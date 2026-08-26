@@ -901,3 +901,81 @@ python task_extension5_dithering_mechanism.py \
 
 4. **纯噪声 vs 4bit QDQ对比**：组(c)中若纯噪声也能复现类似增益，随机性是主因（支持H1）；若只有QDQ有增益，量化的特异性作用（如动态范围压缩）是主因（支持H2方向）。
 
+---
+
+## 15. 第二阶段优化项三：Exp2鲁棒方案迁移至深层网络（Extension 6: Deep Robust Migration）
+
+### 15.1 实验目的
+
+将 SimpleCNN 上验证的 Exp2 鲁棒方案（特征校准模块 + 逐层失真训练 NAT）完整迁移至 VGG-11 和 ResNet-18 两个深层架构，从头训练（与 SimpleCNN 一致，不做微调），验证该方案在深层网络的可迁移性与外推鲁棒性。
+
+### 15.2 校准模块注入位置设计依据
+
+校准模块直接 import 复用 `models/robust_cnn.py` 的 `FeatureCalibration`（结构与 SimpleCNN 完全一致，不修改），仅注入位置随架构适配：
+
+| 架构 | 注入位置 | 处数 | 设计依据 |
+|------|---------|------|---------|
+| VGG-11 | 每个 MaxPool 后 | 5 | MaxPool 是空间下采样与误差累积的关键节点，在每次池化后校准通道特征 |
+| ResNet-18 | 每个 BasicBlock 残差路径（shortcut 输出） | 8 | 残差路径是信息保真通道，校准残差信号 = 校准决策的直接依据 |
+
+**空间特征图适配**：SimpleCNN 中校准作用于 GAP 后的 1D 向量；深层网络注入点输出空间特征图 `(B,C,H,W)`，故在 forward 中 `permute(0,2,3,1)` 把通道维换到末尾后过校准再还原，FeatureCalibration 类本身零修改。
+
+**分层 α 策略适配**：α 数值范围与 SimpleCNN Exp2 逐项一致（浅 [-0.15,0.15]、中/默认 [-0.30,0.30]、fc 固定±0.3），按各架构深度重新分组层名（VGG-11: block1-2 浅/block3-5 中；ResNet-18: conv1+layer1 浅/layer2-3 中/layer4 深），保持"浅层轻、中层标准、深层强"语义。
+
+### 15.3 训练配方（与 SimpleCNN Exp2 逐项一致）
+
+| 超参数 | 值 |
+|--------|-----|
+| epochs | 120 |
+| optimizer | SGD(lr=0.01, momentum=0.9, weight_decay=1e-4) |
+| scheduler | CosineAnnealingLR(T_max=epochs, eta_min=0.0) |
+| batch_size | 128 |
+| num_workers | 2 |
+| seed | 42 |
+| criterion | CrossEntropyLoss |
+
+- Exp2 配置：`use_calibration=True, layerwise_alpha=True, asymmetric_sampling=False`
+- 从头训练（随机初始化，不加载预训练权重）
+- 每 epoch 同时评估 clean(α=0) 与 α=+0.3 测试精度
+
+### 15.4 运行命令示例
+
+```bash
+# 训练 VGG-11
+python task_extension6_deep_robust_train.py --model vgg11
+
+# 训练 ResNet-18
+python task_extension6_deep_robust_train.py --model resnet18
+
+# 评估（两个模型 α 宽范围扫描 + 对比图）
+python task_extension6_eval_deep_robust.py
+
+# 评估时指定对比基准 CSV（默认读取 extension4 汇总 CSV）
+python task_extension6_eval_deep_robust.py \
+    --ext4_csv ./outputs/extension4_alpha_wide/alpha_wide_scan_summary.csv
+```
+
+### 15.5 输入与输出文件
+
+**输入**（复用，纯推理评估）：
+- `./checkpoints/Exp2_Calib+Layerwise_vgg11/best_model.pth`（训练产物）
+- `./checkpoints/Exp2_Calib+Layerwise_resnet18/best_model.pth`（训练产物）
+
+**训练输出**：
+- `./checkpoints/Exp2_Calib+Layerwise_{model}/best_model.pth`（dict 含 model_state_dict + best_test_acc + 三个开关 + exp_name）
+- `./outputs/extension6_deep_robust/{model}/training_curves.png`、`metrics.json`
+
+**评估输出**（`./outputs/extension6_deep_robust/`）：
+
+| 文件 | 说明 |
+|------|------|
+| `alpha_wide_scan_deep_robust.csv` | 6 列：model, weight_type(=exp2_robust), alpha, accuracy, loss, is_extrapolation |
+| `deep_robust_comparison.png` | 两子图（每模型一个），叠加 extension4 的 clean/nat_scratch/nat_finetune 基准曲线 |
+
+### 15.6 预期结果与解读
+
+预期 Exp2 鲁棒模型在 α 宽范围 [-0.6, 0.6] 内的精度衰减斜率缓于 clean 基线，且在训练区间 [-0.3, 0.3] 内接近或优于 nat_scratch/nat_finetune。对比 `deep_robust_comparison.png` 中各曲线：
+- 若 exp2_robust 在外推区(|α|>0.3)明显优于 clean → 鲁棒方案带来真实外推泛化增益；
+- 若 exp2_robust 在训练区内改善但外推区与 clean 重合 → 鲁棒性仅限训练分布内；
+- 跨架构对比：VGG-11（5 MaxPool）与 ResNet-18（0 MaxPool，残差连接）的外推衰减模式差异，可揭示架构对鲁棒性迁移的影响。
+
