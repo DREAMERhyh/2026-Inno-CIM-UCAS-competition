@@ -972,10 +972,17 @@ python task_extension6_eval_deep_robust.py \
 | `alpha_wide_scan_deep_robust.csv` | 6 列：model, weight_type(=exp2_robust), alpha, accuracy, loss, is_extrapolation |
 | `deep_robust_comparison.png` | 两子图（每模型一个），叠加 extension4 的 clean/nat_scratch/nat_finetune 基准曲线 |
 
-### 15.6 预期结果与解读
+### 15.6 实验结果
 
-预期 Exp2 鲁棒模型在 α 宽范围 [-0.6, 0.6] 内的精度衰减斜率缓于 clean 基线，且在训练区间 [-0.3, 0.3] 内接近或优于 nat_scratch/nat_finetune。对比 `deep_robust_comparison.png` 中各曲线：
-- 若 exp2_robust 在外推区(|α|>0.3)明显优于 clean → 鲁棒方案带来真实外推泛化增益；
-- 若 exp2_robust 在训练区内改善但外推区与 clean 重合 → 鲁棒性仅限训练分布内；
-- 跨架构对比：VGG-11（5 MaxPool）与 ResNet-18（0 MaxPool，残差连接）的外推衰减模式差异，可揭示架构对鲁棒性迁移的影响。
+**表 3-1 关键精度对照（测试集，%）**：
 
+| 模型          | 权重            | α=0       | α=+0.3    | α=−0.2    |
+| ------------- | --------------- | --------- | --------- | --------- |
+| VGG-11        | clean           | 89.80     | 36.70     | 72.76     |
+| VGG-11        | nat_scratch     | 90.18     | 44.74     | 79.48     |
+| VGG-11        | nat_finetune    | 89.90     | 39.96     | 74.67     |
+| **VGG-11**    | **exp2_robust** | **91.27** | **50.25** | **82.87** |
+| ResNet-18     | clean           | 92.09     | 17.08     | 32.98     |
+| ResNet-18     | nat_scratch     | 92.27     | 15.64     | 51.82     |
+| ResNet-18     | nat_finetune    | 91.99     | 19.89     | 42.74     |
+| **ResNet-18** | **exp2_robust** | **93.27** | **20.12** | **61.34** |

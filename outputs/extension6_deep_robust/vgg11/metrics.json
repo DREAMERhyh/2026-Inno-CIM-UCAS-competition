@@ -1,0 +1,15 @@
+{
+    "best_test_acc": 91.27,
+    "best_epoch": 105,
+    "total_epochs": 120,
+    "final_train_loss": 0.0021283871073487365,
+    "final_test_loss": 0.48641849193573,
+    "final_train_acc": 99.94791666666667,
+    "final_test_acc": 91.14,
+    "final_alpha03_acc": 48.7,
+    "use_calibration": true,
+    "layerwise_alpha": true,
+    "asymmetric_sampling": false,
+    "exp_name": "Exp2_Calib+Layerwise",
+    "model_name": "vgg11"
+}

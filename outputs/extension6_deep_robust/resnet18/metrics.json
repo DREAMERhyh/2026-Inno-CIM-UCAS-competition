@@ -1,0 +1,15 @@
+{
+    "best_test_acc": 93.27,
+    "best_epoch": 109,
+    "total_epochs": 120,
+    "final_train_loss": 0.0009811518686966827,
+    "final_test_loss": 0.3674712297677994,
+    "final_train_acc": 99.98597756410257,
+    "final_test_acc": 93.19,
+    "final_alpha03_acc": 20.44,
+    "use_calibration": true,
+    "layerwise_alpha": true,
+    "asymmetric_sampling": false,
+    "exp_name": "Exp2_Calib+Layerwise",
+    "model_name": "resnet18"
+}

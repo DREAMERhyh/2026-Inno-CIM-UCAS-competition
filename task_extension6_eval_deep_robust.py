@@ -194,9 +194,9 @@ def plot_deep_robust_comparison(
     # 全局 y 轴范围
     y_min, y_max = 100.0, 0.0
     for model_name in models:
-        for alpha, acc in all_results.get(model_name, []):
-            y_min = min(y_min, acc)
-            y_max = max(y_max, acc)
+        for r in all_results.get(model_name, []):
+            y_min = min(y_min, r["accuracy"])
+            y_max = max(y_max, r["accuracy"])
         for wt_data in load_ext4_baselines(ext4_csv_path, model_name).values():
             for _, acc in wt_data:
                 y_min = min(y_min, acc)
