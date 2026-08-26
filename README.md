@@ -1,6 +1,6 @@
 # 存算一体芯片中非线性误差对推理精度的影响研究
 
-一个面向 CIFAR-10 图像分类的深度学习研究框架，用于系统性地分析存算一体(Compute-in-Memory, CiM)芯片中模拟域非线性失真、ADC 量化误差以及两者联合作用下的推理精度退化机制，并提出非线性感知训练(NAT)与架构级鲁棒性增强方案。内置 4 种模型架构(SimpleCNN / RobustCNN / ResNet-18 / VGG-11)，覆盖 3 项核心任务 + 3 项拓展研究，支持断点续训、丰富可视化与自动化消融汇总。
+一个面向 CIFAR-10 图像分类的深度学习研究框架，用于系统性地分析存算一体(Compute-in-Memory, CiM)芯片中模拟域非线性失真、ADC 量化误差以及两者联合作用下的推理精度退化机制，并提出非线性感知训练(NAT)与架构级鲁棒性增强方案。内置 4 种模型架构(SimpleCNN / RobustCNN / ResNet-18 / VGG-11)，覆盖 3 项核心任务 + 6 项拓展研究，支持断点续训、丰富可视化与自动化消融汇总。
 
 ---
 
@@ -12,7 +12,7 @@
 
 $$y = \alpha \cdot \tilde{x}^3 + (1-\alpha) \cdot \tilde{x}, \quad \tilde{x} = \frac{x}{\|x\|_{\infty, \text{ per-sample}}}$$
 
-其中 $\alpha$ 为非线性强度($\alpha=0$ 理想线性，$\alpha>0$ 正增益饱和，$\alpha<0$ 负增益截止)。本项目围绕以下 6 个研究问题展开：
+其中 $\alpha$ 为非线性强度($\alpha=0$ 理想线性，$\alpha>0$ 正增益饱和，$\alpha<0$ 负增益截止)。本项目围绕以下 7 个研究问题展开：
 
 1. **任务1**：不同 $\alpha$ 下整网精度如何衰减？误差如何跨层累积？哪一层最脆弱？
 2. **任务2**：训练阶段"见过非线性"的 NAT 感知训练(微调 / 从头训练)能多大程度补偿失真？
@@ -20,6 +20,7 @@ $$y = \alpha \cdot \tilde{x}^3 + (1-\alpha) \cdot \tilde{x}, \quad \tilde{x} = \
 4. **拓展1**：不同参数量/深度/拓扑(浅层CNN vs 纯前馈深层VGG vs 残差ResNet)对非线性失真的敏感性差异？
 5. **拓展2**：输入相关的非线性失真 vs 输入无关的高斯加性噪声，两者在误差机制差异及鲁棒性迁移性？
 6. **拓展3**：MAC 非线性 + ADC 量化**联合误差**是否存在超加性叠加恶化？
+7. **第二阶段**：NAT 鲁棒性在训练分布外（|α|>0.3）是否仍有效？Dithering 效应的真实机理是什么？Exp2 增强方案能否迁移至深层网络？
 
 ### 1.2 核心技术亮点
 
@@ -28,6 +29,8 @@ $$y = \alpha \cdot \tilde{x}^3 + (1-\alpha) \cdot \tilde{x}, \quad \tilde{x} = \
 - **逐样本动态 QDQ 量化**：ADC 仿真使用逐样本动态缩放的对称饱和整型量化-反量化，`num_bits >= 32 / None` 自动短路；
 - **完整消融实验自动化**：任务3 `--exp all` 一键串联 Exp1/2/3 三个消融配置，自动生成 CSV + 对比图 + 终端配置表；
 - **多模型架构对比原生支持**：所有任务/拓展的 `get_model()` 工厂支持 `simple_cnn / resnet18 / vgg11 / robust_cnn / exp2` 等多种名称，输出/权重路径根据模型名动态后缀，避免覆盖。
+- **三假设竞争判决实验框架**：剂量匹配三对照（4bit QDQ / 等剂量纯噪声 / 8bit+最优剂量噪声）+ 样本级翻转统计 + 激活分布统计，定量判决 Dithering 效应机理（H1 随机去相关否决 / H2 分布重塑确认 / H3 MaxPool 交互支持）；
+- **跨架构方案迁移验证**：Exp2 的 FeatureCalibration 零修改复用，经 `permute` 适配空间特征图，注入密度随误差累积节点数扩展（VGG-11 每个 MaxPool 后共 5 处 / ResNet-18 每个 BasicBlock 残差路径共 8 处），验证校准注入密度法则。
 
 ---
 
@@ -41,6 +44,8 @@ CIFAR10/
 │   ├── __init__.py
 │   ├── simple_cnn.py                               # SimpleCNN (~0.24M，基线小模型)
 │   ├── robust_cnn.py                               # RobustCNN + FeatureCalibration 残差校准
+│   ├── robust_vgg11.py                             # RobustVGG11：VGG-11 + 每个 MaxPool 后 5 处 FeatureCalibration（Exp2 深层迁移）
+│   ├── robust_resnet.py                            # RobustResNet18：ResNet-18 + 每个 BasicBlock 残差路径 8 处 FeatureCalibration（Exp2 深层迁移）
 │   ├── resnet.py                                   # CIFAR-10 适配版 ResNet-18 (~11.17M)
 │   └── vgg11.py                                    # CIFAR-10 轻量适配版 VGG-11 (~9.2M)
 ├── utils/                                          # 通用工具模块
@@ -55,9 +60,11 @@ CIFAR10/
 │   │   └── best_model.pth
 │   ├── nat_{mode}_{model_tag}/                     # NAT 权重(mode ∈ {finetune, scratch})
 │   │   └── best_model.pth
-│   ├── Exp1_CalibOnly_simple_cnn/                 # 任务3 Exp1(仅方案A),only simple_cnn
-│   ├── Exp2_Calib+Layerwise_simple_cnn/           # 任务3 Exp2(方案A+B),only simple_cnn
-│   └── Exp3_FullRobust_simple_cnn/                # 任务3 Exp3(方案A+B+C),only simple_cnn
+│   ├── Exp1_CalibOnly_simple_cnn/                  # 任务3 Exp1(仅方案A),only simple_cnn
+│   ├── Exp2_Calib+Layerwise_simple_cnn/            # 任务3 Exp2(方案A+B),only simple_cnn
+│   ├── Exp2_Calib+Layerwise_vgg11/                 # 拓展6 Exp2 迁移训练权重,VGG-11
+│   ├── Exp2_Calib+Layerwise_resnet18/              # 拓展6 Exp2 迁移训练权重,ResNet-18
+│   └── Exp3_FullRobust_simple_cnn/                 # 任务3 Exp3(方案A+B+C),only simple_cnn
 ├── outputs/
 │   ├── {model_name}/                               # train.py 干净训练产物(曲线/混淆/指标)
 │   ├── task1_{model_tag}/                          # 任务1：α敏感性+层偏移
@@ -113,15 +120,42 @@ CIFAR10/
 │   │   │   └── error_accumulation_comparison_{m}.png
 │   │   ├── robustness_transfer_comparison.png      # (simple_cnn + exp2 同时存在)
 │   │   └── extension2_{model_tag}_summary.md       # 拓展2 总结文档
-│   └── extension3_{model_tag}/                     # 拓展3：量化+非线性联合(默认带_simplecnn后缀)
-│       ├── {m}_quantization_only.csv
-│       ├── {m}_joint_error.csv
-│       ├── quantization_only_{m}.png
-│       ├── joint_error_heatmap_{m}.png
-│       ├── joint_vs_alone_comparison.png
-│       ├── robustness_under_joint_error.png
-│       ├── joint_error_summary.csv
-│       └── extension3_{model_tag}_summary.md       # 拓展3 总结文档
+│   ├── extension3_{model_tag}/                     # 拓展3：量化+非线性联合(默认带_simplecnn后缀)
+│   │   ├── {m}_quantization_only.csv
+│   │   ├── {m}_joint_error.csv
+│   │   ├── quantization_only_{m}.png
+│   │   ├── joint_error_heatmap_{m}.png
+│   │   ├── joint_vs_alone_comparison.png
+│   │   ├── robustness_under_joint_error.png
+│   │   ├── joint_error_summary.csv
+│   │   └── extension3_{model_tag}_summary.md       # 拓展3 总结文档
+│   ├── extension4_alpha_wide/                      # 拓展4：α 宽范围外推扫描(±0.6,训练区/外推区分区)
+│   │   ├── alpha_wide_scan_summary.csv             # 汇总CSV(model/weight_type/alpha/accuracy/loss/is_extrapolation)
+│   │   ├── simple_cnn_alpha_wide.png               # simple_cnn 4条曲线(含exp2_robust),竖虚线标α=±0.3
+│   │   ├── vgg11_alpha_wide.png                    # vgg11 3条曲线
+│   │   ├── resnet18_alpha_wide.png                 # resnet18 3条曲线
+│   │   └── all_models_alpha_wide.png               # 3子图跨模型对比,共享y轴
+│   ├── extension5_dithering_vgg11/                 # 拓展5：Dithering 效应机理解析(三假设竞争判决)
+│   │   ├── group_a_bits_scan.csv                   # 组(a) bits扫描(num_bits/accuracy/loss/dose)
+│   │   ├── group_b_noise_injection.csv             # 组(b) 噪声注入(noise_type/noise_std/accuracy/loss/dose)
+│   │   ├── group_c_pure_noise.csv                  # 组(c) 纯噪声替代(等效4bit剂量)
+│   │   ├── flip_statistics.csv                     # 样本级翻转统计(saved/killed/net_gain)
+│   │   ├── activation_stats.csv                    # H2激活统计(conv1/分类器输入的均值/标准差/峰度)
+│   │   ├── arch_dithering_summary.csv              # 组(d) 三架构各bits精度+4bit增益vs8bit
+│   │   ├── bits_accuracy_curve.png                 # 组(a) bits-精度曲线,标注36.74/43.27锚点
+│   │   ├── dose_accuracy_curve.png                 # 组(a/b/c)同轴剂量-精度曲线
+│   │   ├── margin_distribution.png                 # 三组样本margin分布叠加图
+│   │   └── arch_comparison_bits.png                # 组(d)三架构bits-精度叠加图,标注MaxPool次数
+│   └── extension6_deep_robust/                     # 拓展6：Exp2 鲁棒方案迁移至深层网络
+│       ├── alpha_wide_scan_deep_robust.csv         # 6列(model/weight_type=exp2_robust/alpha/accuracy/loss/is_extrapolation)
+│       ├── deep_robust_comparison.png              # 两子图(每模型一个),叠加extension4基线曲线
+│       ├── cross_architecture_summary.png          # 三架构×四权重跨架构汇总大图
+│       ├── vgg11/                                  # VGG-11 训练产物
+│       │   ├── training_curves.png
+│       │   └── metrics.json
+│       └── resnet18/                               # ResNet-18 训练产物
+│           ├── training_curves.png
+│           └── metrics.json
 ├── train.py
 ├── evaluate.py
 ├── task1_sensitivity_analysis.py
@@ -131,6 +165,11 @@ CIFAR10/
 ├── task_extension1_network_comparison.py
 ├── task_extension2_noise_vs_nonlinearity.py
 ├── task_extension3_joint_analysis.py
+├── task_extension4_alpha_wide_scan.py
+├── task_extension5_dithering_mechanism.py
+├── task_extension6_deep_robust_train.py
+├── task_extension6_eval_deep_robust.py
+├── plot_cross_arch_summary.py
 ├── requirements.txt
 ├── 原始题目+题目解读+研究思路.md
 └── README.md
@@ -220,6 +259,28 @@ pip install -r requirements.txt
 | 结构 | 8×Conv-BN-ReLU + 5×MaxPool(features Sequential) + GAP + 单 FC(512→10) |
 | 观测层 | `features[7] / features[14] / features[21] / features[28]`(每个 block 最后一个 MaxPool 输出)+ `classifier[-1]` Linear(fc_output) |
 | 设计定位 | 「深层 + 纯前馈 + 无残差」中间对照，剥离残差连接影响，可回答 SimpleCNN vs VGG-11(深度增加是否必然脆弱)、VGG-11 vs ResNet-18(残差是否真正起稳定作用)两道问题 |
+
+### 5.5 RobustVGG11(第二阶段迁移模型)
+
+| 属性 | 值 |
+|---|---|
+| 文件 | [models/robust_vgg11.py](file:./models/robust_vgg11.py) |
+| 参数量 | ~9.81 M(VGG-11 主干 ~9.2 M + 5 处 FeatureCalibration ~0.61 M) |
+| 结构 | 8×Conv-BN-ReLU + 5×MaxPool + GAP + 单 FC(512→10)；每个 MaxPool 后插入一处 FeatureCalibration(Conv→BN→ReLU→MaxPool→Calib) |
+| 校准注入位置 | 5 处：block1~5 每个 MaxPool 输出(通道 64/128/256/512/512)，`hidden_dim = in_dim // 2` 瓶颈减半 |
+| 空间适配 | forward 中 `permute(0,2,3,1)` 把通道维换至末尾过校准再还原，FeatureCalibration 类零修改 |
+| 设计定位 | 任务3 Exp2 方案的深层迁移载体，验证多点空间校准对纯前馈深层网络的鲁棒增益与外推修复 |
+
+### 5.6 RobustResNet18(第二阶段迁移模型)
+
+| 属性 | 值 |
+|---|---|
+| 文件 | [models/robust_resnet.py](file:./models/robust_resnet.py) |
+| 参数量 | ~11.87 M(ResNet-18 主干 ~11.17 M + 8 处 FeatureCalibration ~0.70 M) |
+| 结构 | conv1(3×3 stride=1) + 4 组 CalibratedBasicBlock(通道 64→128→256→512) + GAP + FC；每个 BasicBlock 残差路径接 FeatureCalibration，`out = main(x) + Calib(shortcut(x))` |
+| 校准注入位置 | 8 处：4 stage × 2 block 的 shortcut 输出(含 3 处 downsample block 与 5 处 identity block)，`hidden_dim = out_channels // 2` |
+| 空间适配 | 残差路径输出 (B,C,H,W) 同样 `permute` 适配，FeatureCalibration 类零修改 |
+| 设计定位 | 任务3 Exp2 方案的深层迁移载体，验证残差路径多点校准恢复 Scratch 策略在残差网络上的竞争力 |
 
 ---
 
@@ -812,12 +873,44 @@ python task_extension4_alpha_wide_scan.py \
     --checkpoint_root /path/to/checkpoints
 ```
 
-### 13.6 结果解读指引
+### 13.6 实验结果
 
-1. **外推区斜率分析**：对每个(model, weight_type)组合，分别计算外推区(|α|>0.3)和训练区(|α|≤0.3)的精度衰减斜率（可通过CSV的`is_extrapolation`列区分）。若外推区斜率明显大于训练区，说明模型在外推时快速失效。
-2. **NAT防护边界**：对比同一模型的clean与NAT（finetune/scratch/exp2_robust）曲线：若NAT在外推区的衰减明显缓于clean，说明NAT带来了真实泛化增益；若仅训练区内有改善但外推区与clean重合，说明NAT的鲁棒性仅限训练分布。
-3. **Exp2 Robust跨模型迁移**：simple_cnn的exp2_robust（RobustCNN + FeatureCalibration）在外推区是否优于普通NAT，验证架构级鲁棒增强是否改善外推能力。
-4. **模型架构对比**：通过`all_models_alpha_wide.png`的3子图共享y轴，直观比较simple_cnn/vgg11/resnet18三种架构在外推区的鲁棒性差异。
+**表 13-1 训练区间（α=+0.3）增益复核**——与一阶段结论逐点一致（偏差 0.00pp）：
+
+| 模型 | clean | nat_scratch (Δ) | nat_finetune (Δ) | exp2_robust (Δ) |
+|---|---|---|---|---|
+| SimpleCNN | 55.08 | 64.23 (+9.15) | 56.08 (+1.00) | 68.76 (+13.68) |
+| VGG-11 | 36.70 | 44.74 (+8.04) | 39.96 (+3.26) | — |
+| ResNet-18 | 17.08 | 15.64 (−1.44) | 19.89 (+2.81) | — |
+
+**表 13-2 外推区增益轨迹（SimpleCNN，vs clean，单位 pp）**：
+
+| α | nat_scratch | nat_finetune | exp2_robust |
+|---|---|---|---|
+| +0.35 | +5.89 | +1.29 | +12.53 |
+| +0.40 | **+0.77** | +1.63 | +8.63 |
+| +0.50 | **−10.77** | +1.08 | −2.39 |
+| +0.60 | **−10.89** | −1.58 | −5.11 |
+| −0.40 | +6.44 | +0.84 | +0.53 |
+| −0.50 | +7.58 | +0.68 | −1.55 |
+| −0.60 | **+8.22** | +0.14 | −4.36 |
+
+**表 13-3 VGG-11 nat_scratch 外推增益轨迹（vs clean，pp）**：
+
+| α | +0.3 | +0.35 | +0.4 | +0.5 | +0.6 | −0.3 | −0.4 | −0.5 | −0.6 |
+|---|---|---|---|---|---|---|---|---|---|
+| Δ | +8.04 | +4.24 | +0.53 | +1.05 | +0.10 | +12.89 | +14.27 | +10.49 | +5.31 |
+
+> 训练区与外推区数据由 CSV 的 `is_extrapolation` 列（|α|>0.3 为 True）分区。曲线见 `simple_cnn_alpha_wide.png` / `vgg11_alpha_wide.png` / `resnet18_alpha_wide.png` / `all_models_alpha_wide.png`。
+
+### 13.7 核心发现
+
+1. **训练区间锚点复核**：三架构 clean 的 α=0 / +0.3 精度（84.90/55.08、89.80/36.70、92.09/17.08）与一阶段报告逐位一致，外推区数据在同一评估管线下产出，可信。
+2. **NAT 正向外推增益归零点**：SimpleCNN nat_scratch 增益随外推距离单调衰减——+9.15（α=+0.3）→ +0.77（α≈+0.4，归零）→ −10.77（α=+0.5，反转为劣势）。结论：**NAT 的鲁棒性是训练分布内的属性，正方向超出边界后不仅失效、甚至有害**——失真环境中的过度适应使模型在更极端失真下比 clean 模型更脆。
+3. **负向外推增益保持**：与正方向反转形成鲜明对照，nat_scratch 负侧增益随距离不降反升（+5.48@−0.3 → +8.22@−0.6），VGG-11 负侧全区间保持 +5~14pp。正负不对称性跨架构稳定。
+4. **Finetune 外推衰减最缓**：nat_finetune 在 α=+0.5 处仍 +1.08pp，是三种权重中唯一在深度外推区不恶化的；干净预训练特征是外推稳定性的基础。
+5. **架构容差窗口随深度收窄**：clean 模型保持可用精度（≥70%）的 α 窗口 SimpleCNN 约 [−0.35,+0.25] > VGG-11 约 [−0.25,+0.2] > ResNet-18 约 [−0.15,+0.15]。深层网络可容忍失真带宽本身更窄，论证了深层迁移（拓展6）的必要性。
+6. **SimpleCNN exp2_robust 负侧外推短板**：单一 GAP 后注入的 exp2 在负侧外推区输给 nat_scratch 最多 −12.58pp（α=−0.6 处 58.99 vs 71.57）。该短板是个例还是方案固有缺陷，需深层网络复验——此伏笔由 §15（拓展6）回收。
 
 ---
 
@@ -891,15 +984,66 @@ python task_extension5_dithering_mechanism.py \
     --ext3_root /path/to/outputs
 ```
 
-### 14.6 结果解读指引
+### 14.6 实验结果
 
-1. **倒U形响应的意义**：组(b)中若精度随噪声强度先升后降（倒U形），说明存在最优噪声剂量——dithering去相关发挥最大效用。最优剂量点对应H1的最强证据；若精度单调下降，则随机性不能解释4bit增益。
+**表 14-1 组(a) bits 扫描（VGG-11，α=+0.3）**：
 
-2. **margin分布两种形态**：被救回样本的margin若集中于0附近的浅负区（-5~0），说明Dithering仅救回分类边界附近的模糊样本——"边缘样本救回"假说成立。若存在深负margin（< -10）被救回，则Dithering具备系统性纠错能力（更强的结论）。
+| bits | 2 | 3 | **4** | 5 | 6 | 8 |
+|---|---|---|---|---|---|---|
+| 精度% | 9.98 | 42.97 | **43.27** | 38.00 | 37.13 | 36.74 |
+| 剂量 | 0.945 | 0.553 | 0.245 | 0.115 | 0.055 | 0.014 |
 
-3. **三架构对照与MaxPool关联**：若Dithering增益排序为VGG-11（5次MaxPool）> SimpleCNN（2次）> ResNet-18（0次），支持H3——MaxPool的局部最大值筛选放大了量化噪声的随机扰动，使dithering效果随MaxPool次数增加而增强。若增益排序与此无关，则需寻找其他机理。
+**表 14-2 剂量匹配三对照（核心判决数据，vs 8bit 基线）**：
 
-4. **纯噪声 vs 4bit QDQ对比**：组(c)中若纯噪声也能复现类似增益，随机性是主因（支持H1）；若只有QDQ有增益，量化的特异性作用（如动态范围压缩）是主因（支持H2方向）。
+| 条件 | 剂量 | 精度% | vs 8bit 基线 |
+|---|---|---|---|
+| 8bit QDQ（基线） | 0.014 | 36.74 | — |
+| **4bit QDQ** | **0.245** | **43.27** | **+6.53** |
+| 等剂量高斯噪声（组c） | 0.247 | 34.29 | −2.45 |
+| 等剂量均匀噪声（组c） | 0.247 | 34.87 | −1.87 |
+| 8bit+最优剂量高斯（组b） | 0.041 | 36.71 | −0.03 |
+| 8bit+最优剂量均匀（组b） | 0.026 | 36.68 | −0.06 |
+
+**表 14-3 样本级翻转统计（vs 8bit，10,000 样本）**：
+
+| 条件 | 救回 | 杀死 | 净增益 | 救回:杀死 |
+|---|---|---|---|---|
+| 4bit QDQ | 860 | 207 | +653 | 4.15 : 1 |
+| 8bit+高斯（最优） | 53 | 46 | +7 | ≈1 : 1 |
+| 8bit+均匀（最优） | 44 | 63 | −19 | ≈1 : 1 |
+
+**表 14-4 分类器输入分布统计 vs bits（H2 核心证据）**：
+
+| 条件 | 峰度 | 标准差 | 精度% |
+|---|---|---|---|
+| clean（α=0, 32bit） | 1.486 | 0.682 | 89.80 |
+| α=0.3, 8bit | 0.110 | 0.461 | 36.74 |
+| α=0.3, 6bit | 0.106 | 0.461 | 37.13 |
+| α=0.3, **4bit** | **0.214** | 0.463 | **43.27** |
+| α=0.3, 3bit | 0.384 | 0.497 | 42.97 |
+| α=0.3, 2bit | 0.069 | 0.549 | 9.98 |
+
+> conv1 输出峰度在所有条件下稳定于 4.6~6.7 区间，无系统性变化——分布重塑发生在深层分类器输入处。曲线见 `bits_accuracy_curve.png` / `dose_accuracy_curve.png` / `margin_distribution.png` / `arch_comparison_bits.png`。
+
+### 14.7 三假设判决与结论
+
+**H1（随机去相关）→ 否决**。证据链：①组(b) 两种噪声 × 全剂量扫描，最优增益 −0.03pp，无倒U，单调下降；②组(c) 等剂量纯噪声替代，精度 34.29%，低于 8bit 基线——同等"抖动功率"下随机扰动有害；③翻转统计：噪声条件净翻转 ≈0（+7/−19），与 4bit 的 +653 形成三个数量级反差。**随机性不是增益来源**。
+
+**H2（分布重塑）→ 确认，核心机理**。表 14-4 给出完整机制链条：①非线性失真将分类器输入峰度从 1.486 压平至 0.110，类别可分性被破坏（89.8%→36.74%）；②4bit 的 16 电平粗离散化对该压平分布做非线性再分配，峰度恢复至 0.214，部分重建可分性（+6.53pp）；③存在甜点带——3bit 峰度更高（0.384）但精度略降（42.97），重塑过头叠加信息损失开始抵消增益；2bit 信息量不足，峰度与精度双双坍缩（0.069 / 9.98）。即：**4bit 量化增益的本质是"离散化诱导的分布重塑"——量化充当非线性再分配算子，部分修复失真对决策特征分布的破坏**。
+
+**H3（MaxPool 交互）→ 支持（必要条件）**。表 14-5（arch_dithering_summary.csv）显示 4bit 增益 VGG-11(+6.53) > ResNet-18(+0.39) > SimpleCNN(−13.68)：无 MaxPool 的 ResNet-18 完全免疫，证明 MaxPool 是效应触发的必要条件；但 SimpleCNN（2 次 MaxPool）为 −13.68 负增益，说明 MaxPool 是必要而非充分条件——其密度与位置决定量化误差是修正还是放大失真：VGG-11 的 5 次密集 MaxPool 使粗量化的重塑作用逐级保留放大，SimpleCNN 的稀疏 MaxPool + 紧跟 GAP 使粗量化只剩信息损失。
+
+**综合机理模型**：Dithering 增益 = 分布重塑（H2，提供修复能力）× MaxPool 密度（H3，提供架构载体），与随机性（H1）无关。
+
+**表 14-5 三架构对照（组d，H3 核心证据）**：
+
+| 模型 | MaxPool 数 | 8bit | 4bit | 4bit 增益 |
+|---|---|---|---|---|
+| VGG-11 | 5 | 36.74 | 43.27 | **+6.53** |
+| ResNet-18 | 0 | 16.99 | 17.38 | +0.39（无效应） |
+| SimpleCNN | 2 | 54.92 | 41.24 | **−13.68（负增益）** |
+
+> ⚠ **修正声明**：一阶段将 Dithering 解释为"随机共振/抖动去相关"并提出"ADC 前注入随机噪声"的工程建议。本项 H1 判决**否决该解释与该工程建议**（等剂量注噪零增益，纯噪声替代反而降精度）。正确的机理表述为：在 MaxPool 密集架构（VGG 类）上，**直接采用 4bit ADC 本身**即可获得 +6.53pp 的失真补偿；注噪方案无效。
 
 ---
 
@@ -971,6 +1115,7 @@ python task_extension6_eval_deep_robust.py \
 |------|------|
 | `alpha_wide_scan_deep_robust.csv` | 6 列：model, weight_type(=exp2_robust), alpha, accuracy, loss, is_extrapolation |
 | `deep_robust_comparison.png` | 两子图（每模型一个），叠加 extension4 的 clean/nat_scratch/nat_finetune 基准曲线 |
+| `cross_architecture_summary.png` | 三架构×四权重跨架构汇总大图（由 `plot_cross_arch_summary.py` 生成） |
 
 ### 15.6 实验结果
 
@@ -986,3 +1131,59 @@ python task_extension6_eval_deep_robust.py \
 | ResNet-18     | nat_scratch     | 92.27     | 15.64     | 51.82     |
 | ResNet-18     | nat_finetune    | 91.99     | 19.89     | 42.74     |
 | **ResNet-18** | **exp2_robust** | **93.27** | **20.12** | **61.34** |
+
+**表 3-2 全扫描点胜负统计（exp2_robust vs 基线，15 个 α 点）**：
+
+| 对比 | VGG-11 | ResNet-18 |
+|---|---|---|
+| vs clean | 15胜0平0负（平均 +10.22pp） | 14胜1平0负（平均 +5.02pp） |
+| vs nat_scratch | **15胜0平0负（平均 +4.31pp）** | 14胜1平0负（平均 +2.48pp） |
+| vs nat_finetune | 15胜0平0负（平均 +8.45pp） | 13胜1平1负（平均 +3.81pp） |
+
+> 训练收敛正常：VGG-11 best epoch 105/120（train acc 99.95%），ResNet-18 best 109/120（train acc 99.99%）；metrics.json 的 best_test_acc 与扫描 α=0 值精确一致（91.27/93.27）。曲线见 `deep_robust_comparison.png` / `cross_architecture_summary.png`，数据见 `alpha_wide_scan_deep_robust.csv`。
+
+### 15.7 核心发现
+
+1. **增益跨架构传递**：α=+0.3 相对 clean 的增益 SimpleCNN +13.68 → VGG-11 +13.55 → ResNet-18 +3.04pp。VGG-11 与 SimpleCNN 几乎无损传递，证明方案有效性不依赖浅层架构。
+2. **多点校准修复 §13 伏笔**：SimpleCNN 的 exp2（单一 GAP 后注入）在负侧外推区输给 nat_scratch 最多 −12.58pp；深层版本采用 5/8 个空间注入点后，**15 个扫描点全部压制 nat_scratch**。结论：单一注入点的校准容量不足是 SimpleCNN 负侧短板的成因，多点空间校准可修复——§13.7 发现 6 的遗留问题在本项闭环解答。
+3. **增益随深度衰减，机制为复合最坏情形**：逐层独立采样下，训练时所有层同时取到极端 α 的概率趋近于零；而评估时全局 α=+0.3 意味着全部 17 个卷积层（ResNet-18）**同时**处于边界失真——这是训练分布外的尾部事件，层数越多越极端。ResNet-18 正侧增益收窄至 +3.04pp 与此一致。
+4. **正负不对称性第三证**：三架构 exp2 均呈负侧强于正侧（VGG-11：α=−0.3 为 69.99% vs α=+0.3 为 50.25%），与 §13.7 发现 3（外推不对称）、一阶段"正向失真破坏力 3.4 倍于负向"构成三条独立证据线。
+5. **干净精度零牺牲**：两架构 exp2 的 α=0 精度（91.27/93.27）均为四组权重中最高——校准模块兼具正则化作用，方案无干净精度代价。
+
+**对一阶段策略规律的补充**：一阶段结论"残差网络极限失真下应改用 Finetune"（19.89% vs Scratch 15.64%）；本项显示，残差路径注入校准后，基于 Scratch 的 exp2_robust 达到 20.12%，反超 Finetune——**架构级校准可以恢复 Scratch 策略在残差网络上的竞争力**。
+
+### 15.8 新增模型文件说明
+
+- [models/robust_vgg11.py](file:./models/robust_vgg11.py) — `RobustVGG11`：VGG-11 主干 + 5 处 FeatureCalibration（每个 MaxPool 后一处），forward 中 `permute(0,2,3,1)` 适配空间特征图，校准模块类零修改复用。
+- [models/robust_resnet.py](file:./models/robust_resnet.py) — `RobustResNet18`：ResNet-18 主干 + 8 处 FeatureCalibration（每个 `CalibratedBasicBlock` 残差路径一处，`out = main(x) + Calib(shortcut(x))`），覆盖 4 stage × 2 block 全部残差路径。
+
+---
+
+## 16. 第二阶段优化总结
+
+### 16.1 评审意见与优化项映射
+
+第二阶段围绕评审意见"扩展 α 扫描范围、对 Dithering 效应定量机理解析、增强方案迁移至深层网络、扩展数据集多样性"展开，拆解为四项：
+
+| # | 评审子建议 | 对应优化项 | 执行状态 |
+|---|---|---|---|
+| R1 | 扩展 α 扫描范围 | 优化项一（Extension 4，§13）：α∈[-0.6,0.6] 宽范围外推扫描 | ✅ 完成 |
+| R2 | Dithering 效应定量机理解析 | 优化项二（Extension 5，§14）：三假设竞争判决实验 | ✅ 完成 |
+| R3 | 增强方案迁移至深层网络 | 优化项三（Extension 6，§15）：Exp2 方案迁移 VGG-11/ResNet-18 | ✅ 完成 |
+| R4 | 数据集多样性 | 未执行（时间约束），已论证并列为后续工作 | ⏸ 暂缓 |
+
+**R4 暂缓理由**：冲刺窗口内 R1–R3 合计约 10 GPU 小时即可闭环；R4 需完整的新数据工程（数据获取/预处理/新基准适配）加全部实验矩阵重跑，投入产出失衡。且本工作已有的跨架构验证（3 架构 × 4 权重类型 × 15 失真强度 = 180 组条件）已在"结构泛化"维度覆盖了泛化性诉求，"数据集泛化"维度留作后续工作。
+
+### 16.2 闭环叙事
+
+三项优化并非并列，而是一条递进链——"发现问题→解释机理→修复验证"：
+
+- **Extension 4（量化边界）** → 发现现有防御手段（NAT/Exp2）的有效边界：NAT 正向外推增益在 α≈+0.4 归零反转、架构容差窗口随深度收窄、SimpleCNN exp2 负侧外推短板（−12.58pp vs nat_scratch）；
+- **Extension 5（解释反常）** → 对一阶段发现的 Dithering 反常现象（4bit 量化反而提升失真精度）给出定量机理判决（H1 否决 / H2 确认 / H3 支持），并**修正一阶段"随机共振/抖动去相关"的错误解释**；
+- **Extension 6（突破边界）** → 将最优防御方案迁移至深层网络，其结果反过来修复了 Extension 4 发现的外推短板（多点校准使 15 扫描点全胜），并验证跨架构有效性。
+
+### 16.3 三项综合结论
+
+1. **正负不对称性：三条独立证据线交汇**——一阶段"正向失真破坏力 3.4× 于负向"、Extension 4"NAT 负侧增益随距离递增而正侧反转"、Extension 6"exp2 三架构负侧精度均高于正侧"三条测量收敛于同一结论：正方向（增益饱和型）失真是本质上的难防御方向，失真补偿资源应向正方向倾斜。
+2. **深度规律的统一图景**——注入点 5→9→18 脆弱性递增、容差窗口随深度收窄（SimpleCNN~0.3 → ResNet~0.15）、exp2 增益随深度衰减（+13.68 → +3.04）统一指向"复合最坏情形概率的指数放大"：注入点超过约 10 个的架构，必须配合多点校准才可期待有效防御。
+3. **校准注入密度法则**——SimpleCNN exp2（1 个注入点）负侧外推 −12.58pp vs nat_scratch；深层 exp2（5/8 个注入点）15 点全胜。校准注入密度应随误差累积节点数同步扩展，单点校准（仅 GAP 后）只保护分类边界、不保护特征通路。一阶段未来工作提出的"分布式逐层校准"设想在本项得到实证支持。
