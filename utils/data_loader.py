@@ -2,7 +2,7 @@
 数据加载与预处理模块
 
 功能：
-    - 加载 CIFAR-10 数据集
+    - 加载 CIFAR-10 / CIFAR-100 数据集（经 dataset 参数切换）
     - 训练集数据增强：随机水平翻转、随机裁剪、归一化
     - 测试集：仅归一化
     - 返回 PyTorch DataLoader
@@ -12,17 +12,19 @@ import torch
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
+from utils.paths import validate_dataset
 
-def get_dataloaders(batch_size: int = 128, num_workers: int = 2):
+
+def get_dataloaders(batch_size: int = 128, num_workers: int = 2, dataset: str = "cifar10"):
     """
-    获取 CIFAR-10 的训练集和测试集 DataLoader。
+    获取 CIFAR-10 或 CIFAR-100 的训练集和测试集 DataLoader。
 
-    数据预处理策略：
+    数据预处理策略（两个数据集一致）：
         训练集：
             1. RandomCrop(32, padding=4)：先四周各填充 4 像素，再随机裁剪回 32x32
             2. RandomHorizontalFlip(p=0.5)：随机水平翻转
             3. ToTensor()：转为 Tensor，值域 [0, 1]
-            4. Normalize：使用 CIFAR-10 数据集的全局均值和标准差
+            4. Normalize：使用对应数据集的全局均值和标准差
         测试集：
             1. ToTensor()
             2. Normalize：使用与训练集完全相同的均值和标准差
@@ -30,15 +32,28 @@ def get_dataloaders(batch_size: int = 128, num_workers: int = 2):
     Args:
         batch_size (int): 每个批次的样本数量，默认 128
         num_workers (int): 数据加载线程数，默认 2
+        dataset (str): 数据集名称，"cifar10"（默认）或 "cifar100"
 
     Returns:
         tuple: (train_loader, test_loader)
             - train_loader: 训练集 DataLoader（已打乱顺序）
             - test_loader: 测试集 DataLoader（不打乱顺序）
     """
-    # CIFAR-10 数据集经过统计得出的全局均值和标准差（RGB 三个通道）
-    cifar_mean = (0.4914, 0.4822, 0.4465)
-    cifar_std = (0.2023, 0.1994, 0.2010)
+    validate_dataset(dataset)
+
+    # 按数据集选择：数据集类、全局均值和标准差、是否需要自动下载
+    # CIFAR-10：数据已就位（download=False）
+    # CIFAR-100：首次运行自动下载到 ./data 下（子目录名不同，与 CIFAR-10 不冲突）
+    if dataset == "cifar10":
+        cifar_mean = (0.4914, 0.4822, 0.4465)
+        cifar_std = (0.2023, 0.1994, 0.2010)
+        DatasetClass = datasets.CIFAR10
+        download = False
+    else:  # cifar100
+        cifar_mean = (0.5071, 0.4865, 0.4409)
+        cifar_std = (0.2673, 0.2564, 0.2762)
+        DatasetClass = datasets.CIFAR100
+        download = True
 
     # -------------------- 训练集数据增强 --------------------
     # 组合多个变换，按顺序执行
@@ -61,19 +76,17 @@ def get_dataloaders(batch_size: int = 128, num_workers: int = 2):
     ])
 
     # -------------------- 加载数据集 --------------------
-    # 使用 torchvision 内置的 CIFAR10 数据集类
-    # download=False：因为数据已就位，无需重新下载
-    train_dataset = datasets.CIFAR10(
+    train_dataset = DatasetClass(
         root="./data",
         train=True,
-        download=False,
+        download=download,
         transform=train_transform,
     )
 
-    test_dataset = datasets.CIFAR10(
+    test_dataset = DatasetClass(
         root="./data",
         train=False,
-        download=False,
+        download=download,
         transform=test_transform,
     )
 

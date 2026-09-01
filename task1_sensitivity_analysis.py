@@ -35,6 +35,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 from utils.data_loader import get_dataloaders
+from utils.paths import get_ckpt_root, get_outputs_root, get_num_classes
 from utils.nonlinearity import (
     register_nonlinearity_hooks,
     remove_hooks,
@@ -84,15 +85,19 @@ def parse_args():
         description="Task1: 非线性误差 (Nonlinearity) 敏感性分析"
     )
     parser.add_argument(
+        "--dataset", type=str, default="cifar10",
+        choices=["cifar10", "cifar100"],
+        help="数据集，默认: cifar10",
+    )
+    parser.add_argument(
         "--alpha_values", type=str,
         default="-0.3,-0.2,-0.1,0.0,0.1,0.2,0.3",
         help="逗号分隔的 alpha 值列表（默认: -0.3,-0.2,-0.1,0.0,0.1,0.2,0.3）"
     )
     parser.add_argument("--model", type=str, default="simple_cnn", help="模型名称")
     parser.add_argument(
-        "--checkpoint", type=str,
-        default="./checkpoints/simple_cnn/best_model.pth",
-        help="模型权重 checkpoint 路径"
+        "--checkpoint", type=str, default=None,
+        help="模型权重 checkpoint 路径，默认自动拼接"
     )
     parser.add_argument("--batch_size", type=int, default=128, help="推理 batch size")
     parser.add_argument(
@@ -100,8 +105,8 @@ def parse_args():
         help="推理设备（默认自动选择）"
     )
     parser.add_argument(
-        "--output_dir", type=str, default="./outputs/task1",
-        help="分析结果输出目录（默认: ./outputs/task1）"
+        "--output_dir", type=str, default=None,
+        help="分析结果输出目录，默认 {outputs_root}/task1_{model_tag}"
     )
     parser.add_argument("--seed", type=int, default=42, help="随机种子")
     return parser.parse_args()
@@ -143,7 +148,13 @@ def main():
 
     # ---------- Step 0: 随机种子 + 输出目录 ----------
     set_seed(args.seed)
+    model_tag = args.model.replace("-", "_")
+    if args.checkpoint is None:
+        args.checkpoint = os.path.join(get_ckpt_root(args.dataset), args.model, "best_model.pth")
+    if args.output_dir is None:
+        args.output_dir = os.path.join(get_outputs_root(args.dataset), f"task1_{model_tag}")
     os.makedirs(args.output_dir, exist_ok=True)
+    print(f"[Task1] 数据集: {args.dataset}, 类别数: {get_num_classes(args.dataset)}")
     print(f"[Task1] 输出目录: {os.path.abspath(args.output_dir)}")
 
     # 解析 alpha 值
@@ -162,7 +173,7 @@ def main():
     # ---------- Step 1: 加载干净模型和权重 ----------
     print("\n" + "-" * 60)
     print(f"[Task1] 加载模型: {args.model}")
-    model = get_model(args.model, num_classes=10)
+    model = get_model(args.model, num_classes=get_num_classes(args.dataset))
     total_params = sum(p.numel() for p in model.parameters())
     print(f"[Task1] 总参数量: {total_params:,}")
 
@@ -170,10 +181,18 @@ def main():
     if not os.path.exists(args.checkpoint):
         raise FileNotFoundError(f"Checkpoint 不存在: {args.checkpoint}")
     ckpt = torch.load(args.checkpoint, map_location=device)
-    if isinstance(ckpt, dict) and "model_state_dict" in ckpt:
-        state_dict = ckpt["model_state_dict"]
-        if "best_test_acc" in ckpt:
-            print(f"[Task1] 权重文件记录的原始最佳准确率: {ckpt['best_test_acc']:.2f}%")
+    if isinstance(ckpt, dict):
+        ckpt_dataset = ckpt.get("dataset", "cifar10")
+        print(f"[Task1] checkpoint 数据集来源: {ckpt_dataset}")
+        if ckpt_dataset != args.dataset:
+            print(f"[Task1] WARNING: checkpoint 数据集 ({ckpt_dataset}) 与当前 --dataset "
+                  f"({args.dataset}) 不一致，按兼容模式继续加载。")
+        if "model_state_dict" in ckpt:
+            state_dict = ckpt["model_state_dict"]
+            if "best_test_acc" in ckpt:
+                print(f"[Task1] 权重文件记录的原始最佳准确率: {ckpt['best_test_acc']:.2f}%")
+        else:
+            state_dict = ckpt  # dict 但无 model_state_dict 字段，假设即 state_dict
     else:
         state_dict = ckpt
     model.load_state_dict(state_dict)
@@ -183,7 +202,7 @@ def main():
     # ---------- Step 2: 加载测试集 ----------
     print("\n" + "-" * 60)
     print("[Task1] 加载测试集 DataLoader ...")
-    _, test_loader = get_dataloaders(batch_size=args.batch_size, num_workers=2)
+    _, test_loader = get_dataloaders(batch_size=args.batch_size, num_workers=2, dataset=args.dataset)
     criterion = nn.CrossEntropyLoss()
 
     # ---------- Step 3: 干净基线推理 (alpha=0.0) ----------

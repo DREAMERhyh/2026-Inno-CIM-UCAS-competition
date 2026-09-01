@@ -45,6 +45,7 @@ import torch.nn as nn
 from tqdm import tqdm
 
 from utils.data_loader import get_dataloaders
+from utils.paths import get_ckpt_root, get_outputs_root, get_num_classes
 from utils.nonlinearity import nonlinearity, register_nonlinearity_hooks, remove_hooks
 
 
@@ -158,6 +159,8 @@ class TrainerDeepRobust:
         layerwise_alpha: bool = True,
         asymmetric_sampling: bool = False,
         exp_name: str = "Exp2_Calib+Layerwise",
+        # ====== 双数据集支持参数 ======
+        dataset: str = "cifar10",
     ):
         self.model = model
         self.train_loader = train_loader
@@ -194,6 +197,7 @@ class TrainerDeepRobust:
         self.layerwise_alpha = layerwise_alpha
         self.asymmetric_sampling = asymmetric_sampling
         self.exp_name = exp_name
+        self.dataset = dataset
 
         self.model.to(self.device)
 
@@ -361,6 +365,7 @@ class TrainerDeepRobust:
             "layerwise_alpha": self.layerwise_alpha,
             "asymmetric_sampling": self.asymmetric_sampling,
             "exp_name": self.exp_name,
+            "dataset": self.dataset,
         }, save_path)
         return save_path
 
@@ -408,6 +413,7 @@ class TrainerDeepRobust:
     # ============ 保存 metrics.json ============
     def _save_metrics(self):
         metrics = {
+            "dataset": self.dataset,
             "best_test_acc": round(self.best_test_acc, 4),
             "best_epoch": self.best_epoch,
             "total_epochs": self.num_epochs,
@@ -507,6 +513,11 @@ def parse_args():
         description="Extension 6: Exp2 鲁棒方案迁移至深层网络（VGG-11 / ResNet-18）训练脚本"
     )
     parser.add_argument(
+        "--dataset", type=str, default="cifar10",
+        choices=["cifar10", "cifar100"],
+        help="数据集，默认: cifar10",
+    )
+    parser.add_argument(
         "--model", type=str, required=True,
         choices=["vgg11", "resnet18"],
         help="训练模型：vgg11 或 resnet18",
@@ -534,13 +545,14 @@ def main():
     model_name = args.model
     model_tag = model_name.replace("_", "")
     exp_name = "Exp2_Calib+Layerwise"
-    save_dir_checkpoint = f"./checkpoints/{exp_name}_{model_tag}"
-    output_dir = f"./outputs/extension6_deep_robust/{model_tag}"
+    save_dir_checkpoint = os.path.join(get_ckpt_root(args.dataset), f"{exp_name}_{model_tag}")
+    output_dir = os.path.join(get_outputs_root(args.dataset), f"extension6_deep_robust/{model_tag}")
     os.makedirs(save_dir_checkpoint, exist_ok=True)
     os.makedirs(output_dir, exist_ok=True)
 
     print("\n" + "=" * 70)
     print("【Extension 6：Exp2 鲁棒方案迁移至深层网络 - 启动】")
+    print(f"  --dataset      : {args.dataset}")
     print(f"  --model        : {args.model}")
     print(f"  --epochs       : {args.epochs}")
     print(f"  --lr           : {args.lr}")
@@ -553,14 +565,15 @@ def main():
     print("=" * 70)
 
     # Step 1：数据
-    print("\n[Step 1] 加载 CIFAR-10 数据 ...")
+    print(f"\n[Step 1] 加载 {args.dataset.upper()} 数据 ...")
     train_loader, test_loader = get_dataloaders(
         batch_size=args.batch_size, num_workers=args.num_workers,
+        dataset=args.dataset,
     )
 
     # Step 2：模型（纯从头训练，随机初始化，不加载任何预训练权重）
     print(f"\n[Step 2] 创建模型 {model_name}（从头训练，随机初始化）...")
-    model = get_model(model_name, num_classes=10)
+    model = get_model(model_name, num_classes=get_num_classes(args.dataset))
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"[Model] {model_name} 总参数量: {total_params:,}，可训练: {trainable_params:,}")
@@ -595,7 +608,8 @@ def main():
         layerwise_alpha=True,
         asymmetric_sampling=False,
         exp_name=exp_name,
-    )
+        dataset=args.dataset,
+    )    )
     trainer.train()
 
     print("\n[Extension 6 Done]")

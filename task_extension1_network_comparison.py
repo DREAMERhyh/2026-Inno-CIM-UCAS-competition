@@ -41,6 +41,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 from utils.data_loader import get_dataloaders
+from utils.paths import get_ckpt_root, get_outputs_root, get_num_classes
 from utils.nonlinearity import (
     register_nonlinearity_hooks,
     remove_hooks,
@@ -108,7 +109,7 @@ def evaluate_on_test(model, test_loader, criterion, device):
 # ------------------------------------------------------------------
 # Step 2 模型加载：创建 + 加载 checkpoint + 打印参数量
 # ------------------------------------------------------------------
-def load_model_for_analysis(model_name: str, checkpoint_path: str, device: str):
+def load_model_for_analysis(model_name: str, checkpoint_path: str, device: str, dataset: str = "cifar10"):
     """
     根据 model_name 创建模型实例，加载指定 checkpoint，打印总参数量。
 
@@ -126,15 +127,20 @@ def load_model_for_analysis(model_name: str, checkpoint_path: str, device: str):
         raise FileNotFoundError(f"权重文件不存在: {checkpoint_path}")
 
     print(f"  [Load] 正在创建模型: {model_name}")
-    model = get_model(model_name, num_classes=10)
+    model = get_model(model_name, num_classes=get_num_classes(dataset))
     total_params = sum(p.numel() for p in model.parameters())
     print(f"  [Load] 总参数量: {total_params:,}")
 
     ckpt = torch.load(checkpoint_path, map_location=device)
-    if isinstance(ckpt, dict) and "model_state_dict" in ckpt:
-        model.load_state_dict(ckpt["model_state_dict"])
-        if "best_test_acc" in ckpt:
-            print(f"  [Load] 权重文件记录的最佳 clean 测试准确率: {ckpt['best_test_acc']:.2f}%")
+    if isinstance(ckpt, dict):
+        ckpt_dataset = ckpt.get("dataset", "cifar10")
+        print(f"  [Load] checkpoint 数据集来源: {ckpt_dataset}")
+        if "model_state_dict" in ckpt:
+            model.load_state_dict(ckpt["model_state_dict"])
+            if "best_test_acc" in ckpt:
+                print(f"  [Load] 权重文件记录的最佳 clean 测试准确率: {ckpt['best_test_acc']:.2f}%")
+        else:
+            model.load_state_dict(ckpt)
     else:
         model.load_state_dict(ckpt)
 
@@ -144,41 +150,36 @@ def load_model_for_analysis(model_name: str, checkpoint_path: str, device: str):
     return model, total_params
 
 
-def load_nat_model(model_name, checkpoint_path, device):
+def load_nat_model(model_name, checkpoint_path, device, dataset="cifar10"):
     """
     加载 NAT 训练后的模型权重。
-
-    Args:
-        model_name: 模型名称（"simple_cnn", "resnet18", "vgg11"）
-        checkpoint_path: NAT 权重路径
-        device: 设备
-
-    Returns:
-        (model, total_params) —— 加载失败时返回 (None, 0)
     """
-    # 模型架构与干净模型完全相同，直接复用 get_model
     if model_name == "simple_cnn":
         from models.simple_cnn import SimpleCNN
-        model = SimpleCNN(num_classes=10)
+        model = SimpleCNN(num_classes=get_num_classes(dataset))
     elif model_name == "resnet18":
         from models.resnet import ResNet18
-        model = ResNet18(num_classes=10)
+        model = ResNet18(num_classes=get_num_classes(dataset))
     elif model_name == "vgg11":
         from models.vgg11 import VGG11
-        model = VGG11(num_classes=10)
+        model = VGG11(num_classes=get_num_classes(dataset))
     else:
         raise ValueError(f"不支持的模型: {model_name}")
 
-    # 加载权重
     if not os.path.exists(checkpoint_path):
         print(f"[警告] NAT 权重文件不存在: {checkpoint_path}，跳过该模型")
         return None, 0
 
     ckpt = torch.load(checkpoint_path, map_location=device)
-    if isinstance(ckpt, dict) and "model_state_dict" in ckpt:
-        state_dict = ckpt["model_state_dict"]
-        if "best_test_acc" in ckpt:
-            print(f"  [NAT-{model_name}] 权重记录的最佳准确率: {ckpt['best_test_acc']:.2f}%")
+    if isinstance(ckpt, dict):
+        ckpt_dataset = ckpt.get("dataset", "cifar10")
+        print(f"  [NAT-{model_name}] checkpoint 数据集来源: {ckpt_dataset}")
+        if "model_state_dict" in ckpt:
+            state_dict = ckpt["model_state_dict"]
+            if "best_test_acc" in ckpt:
+                print(f"  [NAT-{model_name}] 权重记录的最佳准确率: {ckpt['best_test_acc']:.2f}%")
+        else:
+            state_dict = ckpt
     else:
         state_dict = ckpt
     model.load_state_dict(state_dict)
@@ -198,6 +199,7 @@ def run_alpha_sensitivity_one_model(
     test_loader, criterion, device, output_dir,
     existing_model=None, existing_total_params=None,
     csv_suffix=None,
+    dataset="cifar10",
 ):
     """
     对单个模型执行完整的 α 扫描，结果保存为 {output_dir}/{model_name}_{csv_suffix}_alpha_sensitivity.csv。
@@ -229,7 +231,7 @@ def run_alpha_sensitivity_one_model(
         model = existing_model
         total_params = existing_total_params
     else:
-        model, total_params = load_model_for_analysis(model_name, checkpoint_path, device)
+        model, total_params = load_model_for_analysis(model_name, checkpoint_path, device, dataset=dataset)
     clean_state_dict = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
 
     results = []
@@ -566,13 +568,17 @@ def parse_args():
         description="拓展研究1：网络结构与参数量对非线性误差的影响 —— SimpleCNN vs VGG-11 vs ResNet-18 对比"
     )
     parser.add_argument(
+        "--dataset", type=str, default="cifar10",
+        choices=["cifar10", "cifar100"],
+        help="数据集，默认: cifar10",
+    )
+    parser.add_argument(
         "--models", type=str, default="simple_cnn,resnet18",
         help="逗号分隔的对比模型列表（默认 simple_cnn,resnet18）",
     )
     parser.add_argument(
-        "--checkpoints", type=str,
-        default="./checkpoints/simple_cnn/best_model.pth,./checkpoints/resnet18/best_model.pth",
-        help="逗号分隔的 checkpoint 路径，与 --models 一一对应（顺序必须匹配）",
+        "--checkpoints", type=str, default=None,
+        help="逗号分隔的 checkpoint 路径，与 --models 一一对应，默认自动拼接",
     )
     parser.add_argument(
         "--nat_models", type=str, default="",
@@ -593,8 +599,8 @@ def parse_args():
         help="推理设备（默认自动选择：有 CUDA 用 CUDA）",
     )
     parser.add_argument(
-        "--output_dir", type=str, default="./outputs/extension1",
-        help="结果输出目录",
+        "--output_dir", type=str, default=None,
+        help="结果输出目录，默认 {outputs_root}/extension1",
     )
     parser.add_argument("--seed", type=int, default=42)
     return parser.parse_args()
@@ -605,15 +611,21 @@ def main():
 
     # ---- Step 0：准备 ----
     set_seed(args.seed)
-    os.makedirs(args.output_dir, exist_ok=True)
-
     model_list = [m.strip() for m in args.models.split(",") if m.strip()]
-    ckpt_list = [c.strip() for c in args.checkpoints.split(",") if c.strip()]
+
+    if args.checkpoints is None:
+        ckpt_list = [os.path.join(get_ckpt_root(args.dataset), m, "best_model.pth") for m in model_list]
+    else:
+        ckpt_list = [c.strip() for c in args.checkpoints.split(",") if c.strip()]
     if len(model_list) != len(ckpt_list):
         raise ValueError(
             f"--models 和 --checkpoints 数量必须匹配，"
             f"当前 models={len(model_list)} 个，checkpoints={len(ckpt_list)} 个"
         )
+
+    if args.output_dir is None:
+        args.output_dir = os.path.join(get_outputs_root(args.dataset), "extension1")
+    os.makedirs(args.output_dir, exist_ok=True)
 
     # ---- 解析 NAT 模型参数 ----
     nat_model_list = []
@@ -638,6 +650,7 @@ def main():
 
     print("\n" + "=" * 72)
     print("【拓展研究1：网络结构与参数量对非线性误差的影响】启动")
+    print(f"  数据集              : {args.dataset}")
     print(f"  对比模型            : {model_list}")
     print(f"  Checkpoint 路径     : {ckpt_list}")
     if nat_model_list:
@@ -650,8 +663,8 @@ def main():
     print("=" * 72)
 
     # ---- Step 1：加载数据 ----
-    print("\n[Step 1] 加载 CIFAR-10 测试集 DataLoader ...")
-    _, test_loader = get_dataloaders(batch_size=args.batch_size, num_workers=2)
+    print("\n[Step 1] 加载 " + args.dataset.upper() + " 测试集 DataLoader ...")
+    _, test_loader = get_dataloaders(batch_size=args.batch_size, num_workers=2, dataset=args.dataset)
     criterion = nn.CrossEntropyLoss()
 
     # ---- Step 2：每个干净模型跑 α 扫描 ----
@@ -670,6 +683,7 @@ def main():
             criterion=criterion,
             device=device,
             output_dir=args.output_dir,
+            dataset=args.dataset,
         )
         all_results[model_name] = res
         all_params[model_name] = total_p
@@ -683,7 +697,7 @@ def main():
         print(f"{'#' * 72}")
         for idx, (nat_model_name, nat_ckpt_path) in enumerate(zip(nat_model_list, nat_ckpt_list)):
             print(f"\n[NAT 模型 {idx + 1}/{len(nat_model_list)}] {nat_model_name} ← {nat_ckpt_path}")
-            nat_model_obj, nat_total_p = load_nat_model(nat_model_name, nat_ckpt_path, device)
+            nat_model_obj, nat_total_p = load_nat_model(nat_model_name, nat_ckpt_path, device, dataset=args.dataset)
             if nat_model_obj is None:
                 print(f"  → 跳过 {nat_model_name}（权重不存在或加载失败）")
                 continue

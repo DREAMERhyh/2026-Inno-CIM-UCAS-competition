@@ -35,6 +35,7 @@ import torch.nn as nn
 
 from utils.data_loader import get_dataloaders
 from utils.trainer import Trainer
+from utils.paths import get_ckpt_root, get_outputs_root, get_num_classes
 
 
 # ------------------------------------------------------------------
@@ -122,7 +123,16 @@ def parse_args():
     Returns:
         argparse.Namespace: 解析后的参数字典对象
     """
-    parser = argparse.ArgumentParser(description="CIFAR-10 图像分类训练脚本（支持续训）")
+    parser = argparse.ArgumentParser(description="CIFAR-10 / CIFAR-100 图像分类训练脚本（支持续训）")
+
+    # 数据集选择
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default="cifar10",
+        choices=["cifar10", "cifar100"],
+        help="数据集，默认: cifar10。cifar100 产物写入 ./checkpoints_cifar100 与 ./outputs_cifar100",
+    )
 
     # 模型相关
     parser.add_argument(
@@ -237,16 +247,17 @@ def main():
 
     # 3) 加载数据
     print("\n" + "-" * 50)
-    print("[Data] 正在加载 CIFAR-10 数据集...")
+    print(f"[Data] 正在加载 {args.dataset.upper()} 数据集...")
     train_loader, test_loader = get_dataloaders(
         batch_size=args.batch_size,
         num_workers=args.num_workers,
+        dataset=args.dataset,
     )
 
     # 4) 创建模型（无论是否续训，都先创建一个结构相同的模型实例）
     print("\n" + "-" * 50)
     print(f"[Model] 正在创建模型: {args.model}")
-    model = get_model(args.model, num_classes=10)
+    model = get_model(args.model, num_classes=get_num_classes(args.dataset))
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"[Model] 总参数量: {total_params:,}，可训练参数量: {trainable_params:,}")
@@ -291,6 +302,14 @@ def main():
         # 加载 checkpoint（map_location 保证即使 CPU 也能加载 GPU 训练的权重）
         print(f"[Resume] 正在加载 checkpoint: {resume_path}")
         checkpoint = torch.load(resume_path, map_location=device)
+
+        # ---- 溯源字段：读取并打印 checkpoint 的 dataset 来源 ----
+        if isinstance(checkpoint, dict):
+            ckpt_dataset = checkpoint.get("dataset", "cifar10")
+            print(f"[Resume] checkpoint 数据集来源: {ckpt_dataset}（来自 dataset 字段，缺省按 cifar10）")
+            if ckpt_dataset != args.dataset:
+                print(f"[Resume] WARNING: checkpoint 数据集 ({ckpt_dataset}) 与当前 --dataset "
+                      f"({args.dataset}) 不一致，按兼容模式继续加载（不报错）。")
 
         # 解析 checkpoint 字段，兼容两种格式：
         #   a) Trainer 保存的字典（推荐）: {"epoch", "model_state_dict",
@@ -370,8 +389,8 @@ def main():
         print("[Mode] 从头训练模式（未指定 --resume）")
 
     # 7) 保存路径：每个模型独立的子目录（与从头训练保持一致，不单独新建目录）
-    save_dir_checkpoint = f"./checkpoints/{args.model}"
-    save_dir_output = f"./outputs/{args.model}"
+    save_dir_checkpoint = f"{get_ckpt_root(args.dataset)}/{args.model}"
+    save_dir_output = f"{get_outputs_root(args.dataset)}/{args.model}"
     print("\n" + "-" * 50)
     print(f"[Save] 模型权重保存目录: {save_dir_checkpoint}")
     print(f"[Save] 输出结果保存目录: {save_dir_output}")
@@ -396,6 +415,9 @@ def main():
         # ====== 续训新增参数 ======
         start_epoch=start_epoch,
         best_test_acc=best_test_acc,
+        # ====== 双数据集支持参数 ======
+        num_classes=get_num_classes(args.dataset),
+        dataset=args.dataset,
     )
 
     trainer.train()

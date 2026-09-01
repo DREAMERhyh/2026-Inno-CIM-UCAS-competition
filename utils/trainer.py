@@ -29,13 +29,7 @@ import matplotlib.pyplot as plt
 import torch
 from tqdm import tqdm
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
-
-
-# CIFAR-10 固定的 10 个类别名称，用于混淆矩阵的标签
-CIFAR10_CLASSES = [
-    "airplane", "automobile", "bird", "cat", "deer",
-    "dog", "frog", "horse", "ship", "truck"
-]
+from utils.paths import CIFAR10_CLASSES
 
 
 class Trainer:
@@ -87,6 +81,9 @@ class Trainer:
         # ====== 续训相关新增参数（Resume Training） ======
         start_epoch: int = 0,
         best_test_acc: float = 0.0,
+        # ====== 双数据集支持新增参数 ======
+        num_classes: int = 10,
+        dataset: str = "cifar10",
     ):
         """
         初始化训练器。
@@ -109,6 +106,8 @@ class Trainer:
             best_test_acc (float): 【续训新增】之前训练阶段的最佳测试准确率（0~100 百分比），
                                    默认为 0.0（从头训练）。续训模式下新的 epoch 准确率超过该
                                    值才会触发最佳模型保存。
+            num_classes (int): 分类类别数（默认 10），用于混淆矩阵标签。
+            dataset (str): 数据集名称（默认 "cifar10"），写入 checkpoint 与 metrics 的溯源字段。
         """
         self.model = model
         self.train_loader = train_loader
@@ -126,6 +125,10 @@ class Trainer:
         self.best_test_acc = best_test_acc
         # 最佳 epoch：从头训练设为 0；续训时暂时设为 start_epoch（若新 epoch 提升时会被覆盖）
         self.best_epoch = start_epoch if start_epoch > 0 else 0
+
+        # 双数据集支持：类别数（用于混淆矩阵标签）与数据集名称（写入溯源字段）
+        self.num_classes = num_classes
+        self.dataset = dataset
 
         # 自动检测可用设备
         self.device = device if device is not None else (
@@ -359,6 +362,7 @@ class Trainer:
                             "model_state_dict": self.model.state_dict(),
                             "optimizer_state_dict": self.optimizer.state_dict(),
                             "best_test_acc": self.best_test_acc,
+                            "dataset": self.dataset,
                         },
                         ckpt_path,
                     )
@@ -385,11 +389,14 @@ class Trainer:
         best_ckpt = os.path.join(self.save_dir_checkpoint, "best_model.pth")
         if os.path.exists(best_ckpt):
             checkpoint = torch.load(best_ckpt, map_location=self.device)
-            self.model.load_state_dict(checkpoint["model_state_dict"])
-            print(f"[Trainer] 已加载最佳模型权重 (Epoch {checkpoint['epoch']})")
-            # 如果 best_test_acc 比 self.best_test_acc 更高（极端情况），以保存的为准
-            self.best_test_acc = max(self.best_test_acc, checkpoint.get("best_test_acc", 0.0))
-            self.best_epoch = checkpoint["epoch"]
+            if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+                # 溯源日志放在此分支内部
+                print(f"[Trainer] checkpoint 数据集来源: {checkpoint.get('dataset', 'cifar10')}")
+                self.model.load_state_dict(checkpoint["model_state_dict"])
+                print(f"[Trainer] 已加载最佳模型权重 (Epoch {checkpoint['epoch']})")
+                # 如果 best_test_acc 比 self.best_test_acc 更高（极端情况），以保存的为准
+                self.best_test_acc = max(self.best_test_acc, checkpoint.get("best_test_acc", 0.0))
+                self.best_epoch = checkpoint["epoch"]
 
         # 使用最佳模型重新跑一遍测试集获取标签和预测
         _, _, all_labels, all_preds = self._evaluate()
@@ -503,6 +510,7 @@ class Trainer:
             "start_epoch": self.start_epoch,
             "resumed": self.start_epoch > 0,
             "best_epoch": self.best_epoch,
+            "dataset": self.dataset,
         }
 
         save_path = os.path.join(self.save_dir_output, "metrics.json")
@@ -522,12 +530,20 @@ class Trainer:
             true_labels (np.ndarray): 形状 (N,)，元素为 0~9 的整数类别索引
             pred_labels (np.ndarray): 形状 (N,)，元素为 0~9 的整数类别索引
         """
-        cm = confusion_matrix(true_labels, pred_labels, labels=list(range(10)))
+        cm = confusion_matrix(true_labels, pred_labels, labels=list(range(self.num_classes)))
 
         fig, ax = plt.subplots(figsize=(10, 9), dpi=120)
         # sklearn 的 ConfusionMatrixDisplay 可以直接绘制美观的混淆矩阵热力图
-        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=CIFAR10_CLASSES)
+        # 类别数较多（如 CIFAR-100）时不显示类别刻度标签，避免刻度文字互相重叠
+        if self.num_classes > 10:
+            display_labels = None
+        else:
+            display_labels = CIFAR10_CLASSES
+        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=display_labels)
         disp.plot(ax=ax, cmap="Blues", values_format="d", xticks_rotation=45)
+        if self.num_classes > 10:
+            ax.set_xticks([])
+            ax.set_yticks([])
         ax.set_title(f"Confusion Matrix - Test Set ({self.model_name})", fontsize=13, fontweight="bold")
 
         plt.tight_layout()

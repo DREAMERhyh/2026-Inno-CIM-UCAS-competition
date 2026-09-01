@@ -40,6 +40,7 @@ from tqdm import tqdm
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 from utils.data_loader import get_dataloaders
+from utils.paths import get_ckpt_root, get_outputs_root, get_num_classes, CIFAR10_CLASSES
 from utils.nonlinearity import (
     register_nonlinearity_hooks,
     remove_hooks,
@@ -82,17 +83,8 @@ def get_model(model_name: str, num_classes: int = 10, use_calibration: bool = Tr
         raise ValueError(f"不支持的模型名称: '{model_name}'")
 
 
-# CIFAR-10 固定类别名（混淆矩阵绘制用）
-CIFAR10_CLASSES = [
-    "airplane", "automobile", "bird", "cat", "deer",
-    "dog", "frog", "horse", "ship", "truck"
-]
-
 # 与任务1、任务2 完全一致的 α 扫描列表，保证对比横轴一致
 ALPHA_SCAN_LIST = [-0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3]
-
-# 任务2 NAT-Scratch 基线 CSV 路径（用于对比绘图）
-NAT_SCRATCH_BASELINE_CSV = "./outputs/task2_simplecnn/scratch/alpha_sensitivity.csv"
 
 
 # ------------------------------------------------------------------
@@ -170,6 +162,9 @@ class TrainerRobust:
         layerwise_alpha: bool = False,
         asymmetric_sampling: bool = False,
         exp_name: str = "Exp1_CalibOnly",
+        # ====== 双数据集支持参数 ======
+        num_classes: int = 10,
+        dataset: str = "cifar10",
     ):
         self.model = model
         self.train_loader = train_loader
@@ -206,6 +201,10 @@ class TrainerRobust:
         self.layerwise_alpha = layerwise_alpha
         self.asymmetric_sampling = asymmetric_sampling
         self.exp_name = exp_name
+
+        # 双数据集支持
+        self.num_classes = num_classes
+        self.dataset = dataset
 
         self.model.to(self.device)
 
@@ -363,6 +362,7 @@ class TrainerRobust:
             "layerwise_alpha": self.layerwise_alpha,
             "asymmetric_sampling": self.asymmetric_sampling,
             "exp_name": self.exp_name,
+            "dataset": self.dataset,
         }, save_path)
         return save_path
 
@@ -406,10 +406,17 @@ class TrainerRobust:
 
     # ============ 混淆矩阵 ============
     def _plot_confusion_matrix(self, all_labels, all_preds):
-        cm = confusion_matrix(all_labels, all_preds)
+        cm = confusion_matrix(all_labels, all_preds, labels=list(range(self.num_classes)))
         fig, ax = plt.subplots(figsize=(9, 8), dpi=120)
-        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=CIFAR10_CLASSES)
+        if self.num_classes > 10:
+            display_labels = None
+        else:
+            display_labels = CIFAR10_CLASSES
+        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=display_labels)
         disp.plot(cmap=plt.cm.Blues, ax=ax, values_format="d")
+        if self.num_classes > 10:
+            ax.set_xticks([])
+            ax.set_yticks([])
         ax.set_title(f"Confusion Matrix - Test Set ({self.exp_name})", fontsize=13, fontweight="bold")
         plt.xticks(rotation=45)
         plt.tight_layout()
@@ -421,6 +428,7 @@ class TrainerRobust:
     # ============ 保存 metrics.json（含任务3的三个开关） ============
     def _save_metrics(self):
         metrics = {
+            "dataset": self.dataset,
             "best_test_acc": self.best_test_acc,
             "best_epoch": self.best_epoch,
             "total_epochs": self.num_epochs,
@@ -480,9 +488,14 @@ class TrainerRobust:
         best_ckpt = os.path.join(self.save_dir_checkpoint, "best_model.pth")
         if os.path.exists(best_ckpt):
             ckpt = torch.load(best_ckpt, map_location=self.device)
-            if isinstance(ckpt, dict) and "model_state_dict" in ckpt:
-                self.model.load_state_dict(ckpt["model_state_dict"])
-                print(f"[TrainerRobust] 已重新加载最佳权重 (Epoch {ckpt['epoch']}, Acc={ckpt['best_test_acc']:.2f}%)")
+            if isinstance(ckpt, dict):
+                ckpt_dataset = ckpt.get("dataset", "cifar10")
+                print(f"[TrainerRobust] checkpoint 数据集来源: {ckpt_dataset}")
+                if "model_state_dict" in ckpt:
+                    self.model.load_state_dict(ckpt["model_state_dict"])
+                    print(f"[TrainerRobust] 已重新加载最佳权重 (Epoch {ckpt['epoch']}, Acc={ckpt['best_test_acc']:.2f}%)")
+                else:
+                    self.model.load_state_dict(ckpt)
 
         _, _, final_labels, final_preds = self._evaluate()
         self._plot_training_curves()
@@ -519,9 +532,15 @@ def evaluate_alpha_scan(
     if not os.path.exists(checkpoint_path):
         raise FileNotFoundError(f"权重不存在: {checkpoint_path}")
     ckpt = torch.load(checkpoint_path, map_location=device)
-    if isinstance(ckpt, dict) and "model_state_dict" in ckpt:
-        model.load_state_dict(ckpt["model_state_dict"])
-        print(f"[α 扫描] 已加载最佳权重 (Epoch={ckpt.get('epoch')}, Acc={ckpt.get('best_test_acc'):.2f}%)")
+    if isinstance(ckpt, dict):
+        ckpt_dataset = ckpt.get("dataset", "cifar10")
+        print(f"[α 扫描] checkpoint 数据集来源: {ckpt_dataset}")
+        if "model_state_dict" in ckpt:
+            model.load_state_dict(ckpt["model_state_dict"])
+            print(f"[α 扫描] 已加载最佳权重 (Epoch={ckpt.get('epoch')}, Acc={ckpt.get('best_test_acc'):.2f}%)")
+        else:
+            model.load_state_dict(ckpt)
+            print(f"[α 扫描] 已加载权重 (直接 state_dict)")
     else:
         model.load_state_dict(ckpt)
 
@@ -570,7 +589,7 @@ def plot_comparison(
     current_results,
     output_dir,
     current_label: str,
-    baseline_csv_path=NAT_SCRATCH_BASELINE_CSV,
+    baseline_csv_path=None,
     plot_filename: str = "accuracy_vs_alpha_comparison.png",
 ):
     """
@@ -628,7 +647,7 @@ def generate_ablation_summary(
     all_exp_configs,
     exp_results_dict,
     task3_output_root="./outputs/task3",
-    baseline_csv_path=NAT_SCRATCH_BASELINE_CSV,
+    baseline_csv_path=None,
 ):
     """
     生成：
@@ -758,27 +777,38 @@ def run_experiment(exp_id: str, args) -> dict:
 
     # 目录：自动包含模型名（simple_cnn → simplecnn，与目录重命名对齐）
     model_tag = args.model.replace("_", "")
-    save_dir_checkpoint = f"./checkpoints/{exp_name}_{model_tag}"
+    save_dir_checkpoint = os.path.join(get_ckpt_root(args.dataset), f"{exp_name}_{model_tag}")
     output_dir = os.path.join(args.output_dir, f"{exp_name}_{model_tag}")
     checkpoint_dir = save_dir_checkpoint
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs(checkpoint_dir, exist_ok=True)
+    print(f"[路径] 数据集: {args.dataset}, 类别数: {get_num_classes(args.dataset)}")
     print(f"[路径] 输出目录: {output_dir}")
     print(f"[路径] 权重目录: {checkpoint_dir}")
+
+    # 计算 NAT-Scratch 基线 CSV 路径
+    nat_baseline_csv = os.path.join(
+        get_outputs_root(args.dataset), f"task2_{model_tag}", "scratch", "alpha_sensitivity.csv"
+    )
+    if args.dataset == "cifar100" and not os.path.exists(nat_baseline_csv):
+        raise FileNotFoundError(
+            f"cifar100 下未找到 NAT-Scratch 基线 CSV: {nat_baseline_csv}\n"
+            f"请先运行: python task2_nat.py --mode scratch --dataset cifar100"
+        )
 
     # 1) 数据
     train_loader, test_loader = get_dataloaders(
         batch_size=args.batch_size,
         num_workers=args.num_workers,
+        dataset=args.dataset,
     )
 
     # 2) 模型
     model_name = args.model
-    # 只有 robust_cnn 支持 use_calibration 开关；simple_cnn 忽略该开关
     if model_name == "robust_cnn":
-        model = get_model(model_name, num_classes=10, use_calibration=cfg["use_calibration"])
+        model = get_model(model_name, num_classes=get_num_classes(args.dataset), use_calibration=cfg["use_calibration"])
     else:
-        model = get_model(model_name, num_classes=10)
+        model = get_model(model_name, num_classes=get_num_classes(args.dataset))
 
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -814,15 +844,17 @@ def run_experiment(exp_id: str, args) -> dict:
         layerwise_alpha=cfg["layerwise_alpha"],
         asymmetric_sampling=cfg["asymmetric_sampling"],
         exp_name=exp_name,
+        num_classes=get_num_classes(args.dataset),
+        dataset=args.dataset,
     )
     clean_best_acc = trainer.train()
 
     # 5) α 敏感性扫描（用新的模型实例 + 加载 best 权重，避免 trainer 内 model 的状态干扰
     best_ckpt_path = os.path.join(checkpoint_dir, "best_model.pth")
     if model_name == "robust_cnn":
-        scan_model = get_model(model_name, num_classes=10, use_calibration=cfg["use_calibration"])
+        scan_model = get_model(model_name, num_classes=get_num_classes(args.dataset), use_calibration=cfg["use_calibration"])
     else:
-        scan_model = get_model(model_name, num_classes=10)
+        scan_model = get_model(model_name, num_classes=get_num_classes(args.dataset))
     alpha_scan_results = evaluate_alpha_scan(
         model=scan_model,
         test_loader=test_loader,
@@ -838,6 +870,7 @@ def run_experiment(exp_id: str, args) -> dict:
         current_results=alpha_scan_results,
         output_dir=output_dir,
         current_label=exp_name,
+        baseline_csv_path=nat_baseline_csv,
     )
 
     # 7) 终端中文摘要（单实验）
@@ -871,10 +904,10 @@ def run_experiment(exp_id: str, args) -> dict:
         print(f"最大精度跌幅: {max_drop:.2f}%  (α = {max_drop_alpha:+.2f})")
 
     # 与 NAT-Scratch 对比（若基线 CSV 存在）
-    if os.path.exists(NAT_SCRATCH_BASELINE_CSV):
+    if os.path.exists(nat_baseline_csv):
         try:
             base_dict = {}
-            with open(NAT_SCRATCH_BASELINE_CSV, "r", encoding="utf-8") as f:
+            with open(nat_baseline_csv, "r", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
                 for row in reader:
                     base_dict[float(row["alpha"])] = float(row["accuracy"])
@@ -908,6 +941,11 @@ def run_experiment(exp_id: str, args) -> dict:
 def parse_args():
     parser = argparse.ArgumentParser(description="任务3：鲁棒性增强方法设计（消融实验统一入口）")
     parser.add_argument(
+        "--dataset", type=str, default="cifar10",
+        choices=["cifar10", "cifar100"],
+        help="数据集，默认: cifar10",
+    )
+    parser.add_argument(
         "--exp", type=str, default="all",
         choices=["1", "2", "3", "all"],
         help="选择实验：'1'=仅方案A，'2'=A+B，'3'=A+B+C 完整方案，'all'=依次运行 1→2→3 并生成消融汇总",
@@ -922,7 +960,7 @@ def parse_args():
     parser.add_argument("--device", type=str, default=None, choices=["cuda", "cpu"])
     parser.add_argument("--num_workers", type=int, default=2)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--output_dir", type=str, default="./outputs/task3_simplecnn", help="任务3输出根目录")
+    parser.add_argument("--output_dir", type=str, default=None, help="任务3输出根目录，默认 {outputs_root}/task3_{model_tag}")
     parser.add_argument("--patience", type=int, default=None, help="早停 patience，None=不启用")
     return parser.parse_args()
 
@@ -930,16 +968,29 @@ def parse_args():
 def main():
     args = parse_args()
 
-    # Step 0：准备工作
     set_seed(args.seed)
 
     if args.device is None:
         args.device = "cuda" if torch.cuda.is_available() else "cpu"
 
+    model_tag = args.model.replace("_", "")
+    if args.output_dir is None:
+        args.output_dir = os.path.join(get_outputs_root(args.dataset), f"task3_{model_tag}")
     os.makedirs(args.output_dir, exist_ok=True)
+
+    # 计算 NAT-Scratch 基线路径（供 --exp all 时传给 generate_ablation_summary）
+    nat_baseline_csv = os.path.join(
+        get_outputs_root(args.dataset), f"task2_{model_tag}", "scratch", "alpha_sensitivity.csv"
+    )
+    if args.dataset == "cifar100" and not os.path.exists(nat_baseline_csv):
+        raise FileNotFoundError(
+            f"cifar100 下未找到 NAT-Scratch 基线 CSV: {nat_baseline_csv}\n"
+            f"请先运行: python task2_nat.py --mode scratch --dataset cifar100"
+        )
 
     print("\n" + "=" * 80)
     print("【任务3：鲁棒性增强方法设计 - 启动】")
+    print(f"  --dataset      : {args.dataset}")
     print(f"  --exp          : {args.exp}")
     print(f"  --model        : {args.model}")
     print(f"  --epochs       : {args.epochs}")
@@ -952,18 +1003,17 @@ def main():
     print("=" * 80)
 
     if args.exp == "all":
-        # 依次运行 Exp1 → Exp2 → Exp3，并收集结果用于消融汇总
         all_exp_configs = [get_exp_config(i) for i in ["1", "2", "3"]]
         results_dict = {}
         for i in ["1", "2", "3"]:
             res = run_experiment(i, args)
             results_dict[res["exp_name"]] = res
 
-        # 生成消融汇总（CSV + 图 + 终端表格）
         generate_ablation_summary(
             all_exp_configs=all_exp_configs,
             exp_results_dict=results_dict,
             task3_output_root=args.output_dir,
+            baseline_csv_path=nat_baseline_csv,
         )
         print("\n" + "=" * 80)
         print("【任务3全部消融实验完成！】")

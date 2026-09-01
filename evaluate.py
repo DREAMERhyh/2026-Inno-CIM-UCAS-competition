@@ -21,6 +21,7 @@
 import argparse
 import os
 import json
+import csv
 import numpy as np
 import torch
 from tqdm import tqdm
@@ -35,13 +36,7 @@ from sklearn.metrics import (
 import matplotlib.pyplot as plt
 
 from utils.data_loader import get_dataloaders
-
-
-# CIFAR-10 固定 10 个类别名称
-CIFAR10_CLASSES = [
-    "airplane", "automobile", "bird", "cat", "deer",
-    "dog", "frog", "horse", "ship", "truck"
-]
+from utils.paths import get_ckpt_root, get_class_names, get_num_classes
 
 
 # ------------------------------------------------------------------
@@ -89,7 +84,14 @@ def get_model(model_name: str, num_classes: int = 10):
 # 命令行参数解析
 # ------------------------------------------------------------------
 def parse_args():
-    parser = argparse.ArgumentParser(description="CIFAR-10 模型评估脚本")
+    parser = argparse.ArgumentParser(description="CIFAR-10 / CIFAR-100 模型评估脚本")
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default="cifar10",
+        choices=["cifar10", "cifar100"],
+        help="数据集，默认: cifar10",
+    )
     parser.add_argument(
         "--model",
         type=str,
@@ -99,8 +101,8 @@ def parse_args():
     parser.add_argument(
         "--checkpoint",
         type=str,
-        default="./checkpoints/simple_cnn/best_model.pth",
-        help="模型权重文件路径 (.pth)",
+        default=None,
+        help="模型权重文件路径 (.pth)，默认自动拼接 {ckpt_root}/{model}/best_model.pth",
     )
     parser.add_argument(
         "--device",
@@ -136,6 +138,9 @@ def parse_args():
 def main():
     args = parse_args()
 
+    num_classes = get_num_classes(args.dataset)
+    class_names = get_class_names(args.dataset)
+
     # 1) 设备选择
     if args.device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -143,33 +148,41 @@ def main():
         device = args.device
     print(f"[Device] 使用评估设备: {device}")
 
-    # 2) 加载测试集 DataLoader（不需要训练集，但 get_dataloaders 返回两个，train_loader 不会被使用
-    print("\n[Data] 加载 CIFAR-10 测试集...")
+    # 2) 加载测试集 DataLoader
+    print(f"\n[Data] 加载 {args.dataset.upper()} 测试集...")
     _, test_loader = get_dataloaders(
         batch_size=args.batch_size,
         num_workers=args.num_workers,
+        dataset=args.dataset,
     )
 
     # 3) 创建模型实例
     print(f"\n[Model] 创建模型: {args.model}")
-    model = get_model(args.model, num_classes=10)
+    model = get_model(args.model, num_classes=num_classes)
 
     # 4) 加载权重文件
+    if args.checkpoint is None:
+        args.checkpoint = os.path.join(get_ckpt_root(args.dataset), args.model, "best_model.pth")
     ckpt_path = args.checkpoint
     if not os.path.exists(ckpt_path):
         raise FileNotFoundError(f"权重文件不存在: {ckpt_path}")
 
     print(f"[Model] 加载权重: {ckpt_path}")
-    # map_location 保证即使在仅 CPU 的机器上也能加载 GPU 训练得到的权重
     checkpoint = torch.load(ckpt_path, map_location=device)
 
-    # 兼容两种存储格式：
-    #   a) Trainer 保存的字典：包含 "model_state_dict" 字段
-    #   b) 直接保存的 state_dict
-    if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
-        state_dict = checkpoint["model_state_dict"]
-        if "best_test_acc" in checkpoint:
-            print(f"[Model] 权重文件记录的最佳测试准确率: {checkpoint['best_test_acc']:.2f}% (Epoch {checkpoint.get('epoch', 'N/A')})")
+    if isinstance(checkpoint, dict):
+        ckpt_dataset = checkpoint.get("dataset", "cifar10")
+        print(f"[Model] checkpoint 数据集来源: {ckpt_dataset}")
+        if ckpt_dataset != args.dataset:
+            print(f"[Model] WARNING: checkpoint 数据集 ({ckpt_dataset}) 与当前 --dataset "
+                  f"({args.dataset}) 不一致，按兼容模式继续评估。")
+        if "model_state_dict" in checkpoint:
+            state_dict = checkpoint["model_state_dict"]
+            if "best_test_acc" in checkpoint:
+                print(f"[Model] 权重文件记录的最佳测试准确率: {checkpoint['best_test_acc']:.2f}% "
+                      f"(Epoch {checkpoint.get('epoch', 'N/A')})")
+        else:
+            state_dict = checkpoint
     else:
         state_dict = checkpoint
 
@@ -182,7 +195,6 @@ def main():
     print("\n[Eval] 正在运行模型推理...")
     all_labels = []
     all_preds = []
-    all_probs = []  # 可选，用于后续分析
 
     with torch.no_grad():
         for images, labels in tqdm(test_loader, desc="Evaluating", leave=False):
@@ -201,6 +213,7 @@ def main():
     # 6) 计算各项分类指标
     print("\n" + "=" * 70)
     print("[Metrics] 分类指标汇总表")
+    print(f"数据集: {args.dataset}, 类别数: {num_classes}")
     print("=" * 70)
 
     # 总体准确率
@@ -209,13 +222,13 @@ def main():
 
     # 每类精确率 / 召回率 / F1-score
     precision_per_class = precision_score(
-        all_labels, all_preds, labels=list(range(10)), average=None, zero_division=0
+        all_labels, all_preds, labels=list(range(num_classes)), average=None, zero_division=0
     ) * 100.0
     recall_per_class = recall_score(
-        all_labels, all_preds, labels=list(range(10)), average=None, zero_division=0
+        all_labels, all_preds, labels=list(range(num_classes)), average=None, zero_division=0
     ) * 100.0
     f1_per_class = f1_score(
-        all_labels, all_preds, labels=list(range(10)), average=None, zero_division=0
+        all_labels, all_preds, labels=list(range(num_classes)), average=None, zero_division=0
     ) * 100.0
 
     # 宏平均（Macro Average：对每类指标取算术平均，不考虑类别样本数差异）
@@ -240,49 +253,70 @@ def main():
         all_labels, all_preds, average="weighted", zero_division=0
     ) * 100.0
 
-    # 打印每类指标表格
-    print("\n{:<12} {:>10} {:>10} {:>10}".format("类别", "Precision", "Recall", "F1-score"))
-    print("-" * 46)
-    for i, cls_name in enumerate(CIFAR10_CLASSES):
-        print(
-            "{:<12} {:>9.2f}% {:>9.2f}% {:>9.2f}%".format(
-                cls_name,
-                precision_per_class[i],
-                recall_per_class[i],
-                f1_per_class[i],
+    # 打印每类指标表格（<=10 类时终端展示，>10 类时仅打印汇总）
+    if num_classes <= 10:
+        print("\n{:<12} {:>10} {:>10} {:>10}".format("类别", "Precision", "Recall", "F1-score"))
+        print("-" * 46)
+        for i, cls_name in enumerate(class_names):
+            print(
+                "{:<12} {:>9.2f}% {:>9.2f}% {:>9.2f}%".format(
+                    cls_name, precision_per_class[i], recall_per_class[i], f1_per_class[i]
+                )
             )
-        )
-    print("-" * 46)
+        print("-" * 46)
+    else:
+        print("\n[Metrics] 类别数 > 10，逐类指标写入 per_class_metrics.csv，终端仅展示汇总。")
     print(
-        "{:<12} {:>9.2f}% {:>9.2f}% {:>9.2f}%".format(
-            "Macro Avg", precision_macro, recall_macro, f1_macro
-        )
+        "{:<12} {:>9.2f}% {:>9.2f}% {:>9.2f}%".format("Macro Avg", precision_macro, recall_macro, f1_macro)
     )
     print(
-        "{:<12} {:>9.2f}% {:>9.2f}% {:>9.2f}%".format(
-            "Weighted Avg", precision_weighted, recall_weighted, f1_weighted
-        )
+        "{:<12} {:>9.2f}% {:>9.2f}% {:>9.2f}%".format("Weighted Avg", precision_weighted, recall_weighted, f1_weighted)
     )
     print("=" * 70)
 
-    # 7) 若指定了输出目录，则保存混淆矩阵和指标 JSON
-    if args.save_output_dir:
-        os.makedirs(args.save_output_dir, exist_ok=True)
+    # 7) 仅当显式传入 --save_output_dir 时才保存结果（原版行为）
+    if args.save_output_dir is None:
+        print("[Output] 未指定 --save_output_dir，跳过结果保存")
+    else:
+        save_output_dir = args.save_output_dir
+        os.makedirs(save_output_dir, exist_ok=True)
 
-        # --- 混淆矩阵图
-        cm = confusion_matrix(all_labels, all_preds, labels=list(range(10)))
+        # --- 混淆矩阵图 ---
+        cm = confusion_matrix(all_labels, all_preds, labels=list(range(num_classes)))
         fig, ax = plt.subplots(figsize=(10, 9), dpi=120)
-        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=CIFAR10_CLASSES)
+        if num_classes > 10:
+            display_labels = None
+        else:
+            display_labels = class_names
+        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=display_labels)
         disp.plot(ax=ax, cmap="Blues", values_format="d", xticks_rotation=45)
+        if num_classes > 10:
+            ax.set_xticks([])
+            ax.set_yticks([])
         ax.set_title(f"Confusion Matrix - Test Set ({args.model})", fontsize=13, fontweight="bold")
         plt.tight_layout()
-        cm_path = os.path.join(args.save_output_dir, "confusion_matrix_eval.png")
+        cm_path = os.path.join(save_output_dir, "confusion_matrix_eval.png")
         plt.savefig(cm_path, bbox_inches="tight")
         plt.close(fig)
         print(f"\n[Output] 混淆矩阵已保存: {cm_path}")
 
-        # --- 指标 JSON
+        # --- 逐类指标 CSV ---
+        csv_path = os.path.join(save_output_dir, "per_class_metrics.csv")
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["class_name", "precision", "recall", "f1"])
+            for i in range(num_classes):
+                writer.writerow([
+                    class_names[i] if i < len(class_names) else f"class_{i}",
+                    round(precision_per_class[i], 4),
+                    round(recall_per_class[i], 4),
+                    round(f1_per_class[i], 4),
+                ])
+        print(f"[Output] 逐类指标已保存: {csv_path}")
+
+        # --- 指标 JSON ---
         metrics = {
+            "dataset": args.dataset,
             "accuracy": round(accuracy, 4),
             "precision_macro": round(precision_macro, 4),
             "recall_macro": round(recall_macro, 4),
@@ -291,15 +325,15 @@ def main():
             "recall_weighted": round(recall_weighted, 4),
             "f1_weighted": round(f1_weighted, 4),
             "per_class": {
-                cls_name: {
+                (class_names[i] if i < len(class_names) else f"class_{i}"): {
                     "precision": round(precision_per_class[i], 4),
                     "recall": round(recall_per_class[i], 4),
                     "f1": round(f1_per_class[i], 4),
                 }
-                for i, cls_name in enumerate(CIFAR10_CLASSES)
+                for i in range(num_classes)
             },
         }
-        metrics_path = os.path.join(args.save_output_dir, "metrics_eval.json")
+        metrics_path = os.path.join(save_output_dir, "metrics_eval.json")
         with open(metrics_path, "w", encoding="utf-8") as f:
             json.dump(metrics, f, indent=4, ensure_ascii=False)
         print(f"[Output] 评估指标已保存: {metrics_path}")

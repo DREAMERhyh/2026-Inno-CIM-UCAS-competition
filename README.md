@@ -1185,5 +1185,123 @@ python task_extension6_eval_deep_robust.py \
 ### 16.3 三项综合结论
 
 1. **正负不对称性：三条独立证据线交汇**——一阶段"正向失真破坏力 3.4× 于负向"、Extension 4"NAT 负侧增益随距离递增而正侧反转"、Extension 6"exp2 三架构负侧精度均高于正侧"三条测量收敛于同一结论：正方向（增益饱和型）失真是本质上的难防御方向，失真补偿资源应向正方向倾斜。
+
+---
+
+## 17. 双数据集支持（CIFAR-10 / CIFAR-100）
+
+本项目从 v2.0 起支持 CIFAR-10 与 CIFAR-100 双数据集参数化切换。所有入口脚本统一增加 `--dataset {cifar10,cifar100}` 参数，默认值为 `cifar10`，**不带 `--dataset` 的旧命令行为完全不变**，保证向后兼容。
+
+### 17.1 `--dataset` 参数说明
+
+| 选项 | 类别数 | 归一化 Mean (RGB) | 归一化 Std (RGB) | 产物根目录 |
+|------|--------|-------------------|-------------------|------------|
+| `cifar10`（默认） | 10 | (0.4914, 0.4822, 0.4465) | (0.2023, 0.1994, 0.2010) | `./checkpoints/` + `./outputs/` |
+| `cifar100` | 100（fine label） | (0.5071, 0.4865, 0.4409) | (0.2673, 0.2564, 0.2762) | `./checkpoints_cifar100/` + `./outputs_cifar100/` |
+
+数据增强策略（随机水平翻转 + 随机裁剪 + 归一化）与 DataLoader 配置（batch_size=128, num_workers=2）两个数据集完全一致。
+
+### 17.2 目录结构
+
+```
+├── data/                                      # 数据集（共享根目录）
+│   ├── cifar-10-batches-py/                   # CIFAR-10（已就位）
+│   └── cifar-100-python/                      # CIFAR-100（首次运行自动下载，约 169MB）
+├── checkpoints/                               # CIFAR-10 训练权重
+├── checkpoints_cifar100/                      # CIFAR-100 训练权重（与 CIFAR-10 隔离）
+├── outputs/                                   # CIFAR-10 分析产物
+└── outputs_cifar100/                          # CIFAR-100 分析产物（与 CIFAR-10 隔离）
+```
+
+### 17.3 路径隔离机制
+
+- 所有 argparse 路径参数（`--checkpoint`、`--output_dir`、`--checkpoint_root`、`--ext3_root`、`--ext4_csv` 等）默认值统一设为 `None`，在 `main()` 中经 `utils/paths.py` 的 `get_ckpt_root(dataset)` / `get_outputs_root(dataset)` 动态计算。
+- 例如 `--dataset cifar100 --model simple_cnn` 下，模型权重默认路径为 `./checkpoints_cifar100/simple_cnn/best_model.pth`，输出默认路径为 `./outputs_cifar100/simple_cnn/`。
+- 显式指定路径参数时覆盖默认值，由调用者自行负责路径正确性。
+- 旧脚本产物（`./checkpoints/`、`./outputs/` 下的文件）不会被任何 `--dataset cifar100` 命令触碰。
+
+### 17.4 数据集溯源字段
+
+所有 checkpoint 保存 dict 与 `metrics.json` 新增 `"dataset"` 字段（值为 `"cifar10"` 或 `"cifar100"`），便于跨数据集回溯权重来源。
+
+所有 `torch.load` 调用点读取 `ckpt.get("dataset", "cifar10")` 并打印来源日志。若 checkpoint 记录的 dataset 与当前 `--dataset` 不一致，打印 WARNING 后按兼容模式继续（不报错），以保证新旧权重互操作。
+
+### 17.5 大类别展示规则
+
+- 混淆矩阵在 `num_classes > 10` 时不显示类别刻度标签，避免文字重叠。
+- `evaluate.py` 在类别数 > 10 时终端只打印 accuracy + macro/weighted 汇总；逐类指标完整写入 `metrics_eval.json` 的 `per_class` 字段，并另存 `per_class_metrics.csv`（列：`class_name, precision, recall, f1`）。
+
+### 17.6 前置权重依赖
+
+若某个脚本需要读取前置阶段的权重或 CSV（例如 task2 finetune 需要 train.py 产物，task3 需要 task2 scratch 产物），在 `--dataset cifar100` 下文件不存在时会明确报错，并提示先运行对应的 `--dataset cifar100` 命令。cifar10 下按原设计可选跳过绘制。
+
+---
+
+## 18. CIFAR-100 快速开始
+
+### 18.1 冒烟测试
+
+```bash
+python train.py --model simple_cnn --dataset cifar100 --epochs 2
+```
+
+首次运行 CIFAR-100 时，数据会自动从 torchvision 下载到 `./data/cifar-100-python/`（约 169MB，与 CIFAR-10 共用 `./data` 根目录，子目录名不同不冲突）。
+
+### 18.2 各模型推荐训练轮数（建议值）
+
+| 模型 | CIFAR-100 推荐 epochs | 备注 |
+|------|----------------------|------|
+| SimpleCNN | 120 | 小模型，收敛较快 |
+| VGG-11 | 200 | 深层纯前馈，需更多轮次 |
+| ResNet-18 | 200 | 残差结构，深层需充分训练 |
+
+以上为建议值，可根据 GPU 资源与精度要求自行调整（通过 `--epochs` 参数指定）。
+
+### 18.3 完整链路示例
+
+以下命令按依赖顺序执行，覆盖全部 6 项核心任务 + 拓展研究的 CIFAR-100 完整流程：
+
+```bash
+# 1. 干净训练（SimpleCNN，120 epochs）
+python train.py --model simple_cnn --dataset cifar100 --epochs 120
+
+# 2. 任务1：非线性误差敏感性分析
+python task1_sensitivity_analysis.py --model simple_cnn --dataset cifar100
+
+# 3. 任务1（层分析）
+python task1_layer_analysis.py --model simple_cnn --dataset cifar100
+
+# 4. 任务2：NAT 训练（finetune 模式）
+python task2_nat.py --mode finetune --model simple_cnn --dataset cifar100
+
+# 5. 任务3：鲁棒性消融
+python task3_robust.py --model robust_cnn --dataset cifar100 --exp all
+
+# 6. 拓展研究4：α 宽范围扫描
+python task_extension4_alpha_wide_scan.py --models simple_cnn --dataset cifar100
+
+# 7. 拓展研究6：深层网络评估
+python task_extension6_eval_deep_robust.py --models vgg11,resnet18 --dataset cifar100
+
+# 8. 跨架构汇总图
+python plot_cross_arch_summary.py --dataset cifar100
+```
+
+> **注意**：以上命令仅覆盖 SimpleCNN 为主线的链路；如需 ResNet-18 / VGG-11 的完整链路，请先对相应模型运行 `train.py` 训练干净权重，再依次执行拓展脚本。
+
+### 18.4 CIFAR-100 实验结果
+
+| 实验项 | 数据集 | 配置 | 精度 / 指标 | 备注 |
+|--------|--------|------|-------------|------|
+| Clean Baseline (SimpleCNN, 120ep) | cifar100 | SimpleCNN | **待填** |  |
+| Clean Baseline (VGG-11, 200ep) | cifar100 | VGG-11 | **待填** |  |
+| Clean Baseline (ResNet-18, 200ep) | cifar100 | ResNet-18 | **待填** |  |
+| NAT Scratch (SimpleCNN) | cifar100 | α∈[-0.3,0.3] random | **待填** |  |
+| NAT Finetune (SimpleCNN) | cifar100 | α∈[-0.3,0.3] random | **待填** |  |
+| Exp2 Robust (SimpleCNN) | cifar100 | Calib+Layerwise | **待填** |  |
+| Exp2 Robust (VGG-11) | cifar100 | Exp2_Calib+Layerwise | **待填** |  |
+| Exp2 Robust (ResNet-18) | cifar100 | Exp2_Calib+Layerwise | **待填** |  |
+
+> **回归测试说明**：CIFAR-10 既有产物回归测试由用户统一安排；CIFAR-100 实验数值章节留空待填，待用户完成对应训练与分析后补全上表。
 2. **深度规律的统一图景**——注入点 5→9→18 脆弱性递增、容差窗口随深度收窄（SimpleCNN~0.3 → ResNet~0.15）、exp2 增益随深度衰减（+13.68 → +3.04）统一指向"复合最坏情形概率的指数放大"：注入点超过约 10 个的架构，必须配合多点校准才可期待有效防御。
 3. **校准注入密度法则**——SimpleCNN exp2（1 个注入点）负侧外推 −12.58pp vs nat_scratch；深层 exp2（5/8 个注入点）15 点全胜。校准注入密度应随误差累积节点数同步扩展，单点校准（仅 GAP 后）只保护分类边界、不保护特征通路。一阶段未来工作提出的"分布式逐层校准"设想在本项得到实证支持。

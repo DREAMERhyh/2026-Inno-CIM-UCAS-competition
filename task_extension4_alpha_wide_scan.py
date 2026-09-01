@@ -39,6 +39,7 @@ import torch.nn as nn
 from tqdm import tqdm
 
 from utils.data_loader import get_dataloaders
+from utils.paths import get_ckpt_root, get_outputs_root, get_num_classes
 from utils.nonlinearity import (
     register_nonlinearity_hooks,
     remove_hooks,
@@ -100,28 +101,21 @@ def create_model(model_name: str, weight_type: str, num_classes: int = 10) -> nn
 
 
 def load_checkpoint(checkpoint_path: str, device: str):
-    """
-    加载 checkpoint，兼容 dict（含 model_state_dict 键）与裸 state_dict 两种格式。
-
-    Args:
-        checkpoint_path (str): checkpoint 文件路径
-        device (str): 加载设备
-
-    Returns:
-        dict: 模型 state_dict（可直接用于 model.load_state_dict）
-    """
     if not os.path.exists(checkpoint_path):
         raise FileNotFoundError(f"Checkpoint 不存在: {checkpoint_path}")
     ckpt = torch.load(checkpoint_path, map_location=device)
-    if isinstance(ckpt, dict) and "model_state_dict" in ckpt:
-        state_dict = ckpt["model_state_dict"]
-        if "best_test_acc" in ckpt:
-            best_acc = ckpt["best_test_acc"]
+    if isinstance(ckpt, dict):
+        ckpt_dataset = ckpt.get("dataset", "cifar10")
+        print(f"  [Load] checkpoint 数据集来源: {ckpt_dataset}")
+        if "model_state_dict" in ckpt:
+            state_dict = ckpt["model_state_dict"]
+            if "best_test_acc" in ckpt:
+                best_acc = ckpt["best_test_acc"]
+            else:
+                best_acc = None
         else:
+            state_dict = ckpt
             best_acc = None
-    else:
-        state_dict = ckpt
-        best_acc = None
     return state_dict, best_acc
 
 
@@ -372,6 +366,11 @@ def parse_args():
         description="Extension 4: α 宽范围扫描 — 评估 NAT 模型在训练分布外的外推鲁棒性"
     )
     parser.add_argument(
+        "--dataset", type=str, default="cifar10",
+        choices=["cifar10", "cifar100"],
+        help="数据集，默认: cifar10",
+    )
+    parser.add_argument(
         "--models", type=str, default="simple_cnn,vgg11,resnet18",
         help="逗号分隔的模型名称列表（默认: simple_cnn,vgg11,resnet18）",
     )
@@ -386,9 +385,8 @@ def parse_args():
         help="逗号分隔的 α 值列表（默认: 15 个扫描点，覆盖 [-0.6, 0.6]）",
     )
     parser.add_argument(
-        "--output_dir", type=str,
-        default="./outputs/extension4_alpha_wide/",
-        help="输出目录（默认: ./outputs/extension4_alpha_wide/）",
+        "--output_dir", type=str, default=None,
+        help="输出目录，默认 {outputs_root}/extension4_alpha_wide/",
     )
     parser.add_argument(
         "--batch_size", type=int, default=128,
@@ -403,8 +401,8 @@ def parse_args():
         help="推理设备（默认自动选择）",
     )
     parser.add_argument(
-        "--checkpoint_root", type=str, default="./checkpoints",
-        help="checkpoint 根目录，允许重定位（默认: ./checkpoints）",
+        "--checkpoint_root", type=str, default=None,
+        help="checkpoint 根目录，默认 {ckpt_root}",
     )
     return parser.parse_args()
 
@@ -418,7 +416,13 @@ def main():
 
     # ---------- Step 0: 随机种子 + 输出目录 ----------
     set_seed(args.seed)
+
+    if args.checkpoint_root is None:
+        args.checkpoint_root = get_ckpt_root(args.dataset)
+    if args.output_dir is None:
+        args.output_dir = os.path.join(get_outputs_root(args.dataset), "extension4_alpha_wide")
     os.makedirs(args.output_dir, exist_ok=True)
+    print(f"[Extension4] 数据集: {args.dataset}, 类别数: {get_num_classes(args.dataset)}")
     print(f"[Extension4] 输出目录: {os.path.abspath(args.output_dir)}")
 
     # 解析参数列表
@@ -449,8 +453,8 @@ def main():
 
     # ---------- Step 2: 加载测试集 ----------
     print("\n" + "-" * 60)
-    print("[Extension4] 加载测试集 DataLoader ...")
-    _, test_loader = get_dataloaders(batch_size=args.batch_size, num_workers=2)
+    print("[Extension4] 加载 " + args.dataset.upper() + " 测试集 DataLoader ...")
+    _, test_loader = get_dataloaders(batch_size=args.batch_size, num_workers=2, dataset=args.dataset)
     criterion = nn.CrossEntropyLoss()
 
     # ---------- Step 3: 执行全矩阵 α 扫描 ----------
@@ -473,7 +477,7 @@ def main():
         print(f"        checkpoint={checkpoint_path}")
 
         # a. 创建模型实例（根据 weight_type 自动选择正确的模型类）
-        model = create_model(model_name, weight_type, num_classes=10)
+        model = create_model(model_name, weight_type, num_classes=get_num_classes(args.dataset))
 
         # b. 加载权重
         state_dict, best_acc = load_checkpoint(checkpoint_path, device)

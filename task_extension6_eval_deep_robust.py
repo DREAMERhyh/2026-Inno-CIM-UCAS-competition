@@ -38,6 +38,7 @@ import torch.nn as nn
 from tqdm import tqdm
 
 from utils.data_loader import get_dataloaders
+from utils.paths import get_ckpt_root, get_outputs_root, get_num_classes
 from utils.nonlinearity import register_nonlinearity_hooks, remove_hooks
 
 
@@ -79,13 +80,18 @@ def create_model(model_name: str, num_classes: int = 10) -> nn.Module:
 
 
 def load_checkpoint(checkpoint_path: str, device: str):
-    """加载 checkpoint，兼容 dict（含 model_state_dict）与裸 state_dict 两种格式。"""
     if not os.path.exists(checkpoint_path):
         raise FileNotFoundError(f"Checkpoint 不存在: {checkpoint_path}")
     ckpt = torch.load(checkpoint_path, map_location=device)
-    if isinstance(ckpt, dict) and "model_state_dict" in ckpt:
-        state_dict = ckpt["model_state_dict"]
-        best_acc = ckpt.get("best_test_acc", None)
+    if isinstance(ckpt, dict):
+        ckpt_dataset = ckpt.get("dataset", "cifar10")
+        print(f"  [Load] checkpoint 数据集来源: {ckpt_dataset}")
+        if "model_state_dict" in ckpt:
+            state_dict = ckpt["model_state_dict"]
+            best_acc = ckpt.get("best_test_acc", None)
+        else:
+            state_dict = ckpt
+            best_acc = None
     else:
         state_dict = ckpt
         best_acc = None
@@ -262,6 +268,11 @@ def parse_args():
         description="Extension 6 评估: 对 VGG-11/ResNet-18 的 Exp2 鲁棒 checkpoint 执行 α 宽范围扫描"
     )
     parser.add_argument(
+        "--dataset", type=str, default="cifar10",
+        choices=["cifar10", "cifar100"],
+        help="数据集，默认: cifar10",
+    )
+    parser.add_argument(
         "--models", type=str, default="vgg11,resnet18",
         help="逗号分隔的模型列表（默认: vgg11,resnet18）",
     )
@@ -271,18 +282,16 @@ def parse_args():
         help="逗号分隔的 α 值（默认: 15 点覆盖 [-0.6, 0.6]）",
     )
     parser.add_argument(
-        "--output_dir", type=str,
-        default="./outputs/extension6_deep_robust/",
-        help="输出目录（默认: ./outputs/extension6_deep_robust/）",
+        "--output_dir", type=str, default=None,
+        help="输出目录，默认 {outputs_root}/extension6_deep_robust/",
     )
     parser.add_argument(
-        "--checkpoint_root", type=str, default="./checkpoints",
-        help="checkpoint 根目录（默认: ./checkpoints）",
+        "--checkpoint_root", type=str, default=None,
+        help="checkpoint 根目录，默认 {ckpt_root}",
     )
     parser.add_argument(
-        "--ext4_csv", type=str,
-        default="./outputs/extension4_alpha_wide/alpha_wide_scan_summary.csv",
-        help="extension4 汇总 CSV 路径（对比基准，默认: ./outputs/extension4_alpha_wide/alpha_wide_scan_summary.csv）",
+        "--ext4_csv", type=str, default=None,
+        help="extension4 汇总 CSV 路径，默认 {outputs_root}/extension4_alpha_wide/alpha_wide_scan_summary.csv",
     )
     parser.add_argument("--batch_size", type=int, default=128, help="推理 batch size（默认 128）")
     parser.add_argument("--seed", type=int, default=42, help="随机种子（默认 42）")
@@ -299,7 +308,15 @@ def main():
 
     # Step 0：准备
     set_seed(args.seed)
+
+    if args.checkpoint_root is None:
+        args.checkpoint_root = get_ckpt_root(args.dataset)
+    if args.output_dir is None:
+        args.output_dir = os.path.join(get_outputs_root(args.dataset), "extension6_deep_robust")
+    if args.ext4_csv is None:
+        args.ext4_csv = os.path.join(get_outputs_root(args.dataset), "extension4_alpha_wide", "alpha_wide_scan_summary.csv")
     os.makedirs(args.output_dir, exist_ok=True)
+    print(f"[Extension6 Eval] 数据集: {args.dataset}, 类别数: {get_num_classes(args.dataset)}")
     print(f"[Extension6 Eval] 输出目录: {os.path.abspath(args.output_dir)}")
 
     models = [m.strip() for m in args.models.split(",") if m.strip()]
@@ -314,8 +331,8 @@ def main():
     print(f"[Extension6 Eval] 推理设备: {device}")
 
     # Step 1：数据
-    print("\n[Extension6 Eval] 加载测试集 ...")
-    _, test_loader = get_dataloaders(batch_size=args.batch_size, num_workers=2)
+    print("\n[Extension6 Eval] 加载 " + args.dataset.upper() + " 测试集 ...")
+    _, test_loader = get_dataloaders(batch_size=args.batch_size, num_workers=2, dataset=args.dataset)
     criterion = nn.CrossEntropyLoss()
 
     # Step 2：逐模型扫描
@@ -337,7 +354,7 @@ def main():
             continue
 
         # 创建模型 + 加载权重
-        model = create_model(model_name, num_classes=10)
+        model = create_model(model_name, num_classes=get_num_classes(args.dataset))
         state_dict, best_acc = load_checkpoint(ckpt_path, device)
         model.load_state_dict(state_dict)
         model.to(device)

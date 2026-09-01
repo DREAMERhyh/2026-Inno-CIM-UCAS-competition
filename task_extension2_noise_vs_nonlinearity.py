@@ -35,6 +35,7 @@ import torch.nn as nn
 from tqdm import tqdm
 
 from utils.data_loader import get_dataloaders
+from utils.paths import get_ckpt_root, get_outputs_root, get_num_classes
 from utils.perturbation import (
     register_perturbation_hooks,
     remove_hooks,
@@ -103,50 +104,50 @@ def get_observe_layers_for_ext2(model_name: str):
 # ------------------------------------------------------------------
 # Step 2：模型 & 权重加载
 # ------------------------------------------------------------------
-def get_model_for_ext2(model_name: str, device: str):
-    """
-    加载拓展2所需的模型 & 干净权重。
-
-    Args:
-        model_name: "simple_cnn" 或 "exp2"
-        device: "cuda" / "cpu"
-
-    Returns:
-        (model: nn.Module, clean_baseline_acc: float | None)
-    """
+def get_model_for_ext2(model_name: str, device: str, dataset: str = "cifar10"):
+    """加载拓展2所需的模型 & 干净权重。"""
+    num_classes = get_num_classes(dataset)
+    ckpt_root = get_ckpt_root(dataset)
     if model_name == "simple_cnn":
         from models.simple_cnn import SimpleCNN
-        model = SimpleCNN(num_classes=10)
-        ckpt_path = "./checkpoints/simple_cnn/best_model.pth"
+        model = SimpleCNN(num_classes=num_classes)
+        ckpt_path = os.path.join(ckpt_root, "simple_cnn", "best_model.pth")
         known_clean_acc = 84.90
     elif model_name == "exp2":
         from models.robust_cnn import RobustCNN
-        # 任务3 Exp2 = Exp2_Calib+Layerwise：use_calibration=True
-        model = RobustCNN(num_classes=10, use_calibration=True)
-        ckpt_path = "./checkpoints/Exp2_Calib+Layerwise_simplecnn/best_model.pth"
+        model = RobustCNN(num_classes=num_classes, use_calibration=True)
+        ckpt_path = os.path.join(ckpt_root, "Exp2_Calib+Layerwise_simplecnn", "best_model.pth")
         known_clean_acc = 87.37
     elif model_name == "vgg11":
         from models.vgg11 import VGG11
-        model = VGG11(num_classes=10)
-        ckpt_path = "./checkpoints/vgg11/best_model.pth"
+        model = VGG11(num_classes=num_classes)
+        ckpt_path = os.path.join(ckpt_root, "vgg11", "best_model.pth")
         known_clean_acc = 89.8
     elif model_name == "resnet18":
         from models.resnet import ResNet18
-        model = ResNet18(num_classes=10)
-        ckpt_path = "./checkpoints/resnet18/best_model.pth"
+        model = ResNet18(num_classes=num_classes)
+        ckpt_path = os.path.join(ckpt_root, "resnet18", "best_model.pth")
         known_clean_acc = 92.09
     else:
         raise ValueError(f"未知模型 model_name='{model_name}'，期望 'simple_cnn'/'exp2'/'vgg11'")
+
+    if dataset != "cifar10":
+        print(f"[Warning] known_clean_acc 为 CIFAR-10 经验值，仅作 fallback，"
+              f"当前数据集为 {dataset}")
 
     if not os.path.exists(ckpt_path):
         raise FileNotFoundError(f"权重不存在: {ckpt_path}")
 
     ckpt = torch.load(ckpt_path, map_location=device)
-    if isinstance(ckpt, dict) and "model_state_dict" in ckpt:
-        model.load_state_dict(ckpt["model_state_dict"])
-        # 如果 checkpoint 自身带 best_test_acc，则优先使用
-        if "best_test_acc" in ckpt:
-            known_clean_acc = float(ckpt["best_test_acc"])
+    if isinstance(ckpt, dict):
+        ckpt_dataset = ckpt.get("dataset", "cifar10")
+        print(f"[Model] checkpoint 数据集来源: {ckpt_dataset}")
+        if "model_state_dict" in ckpt:
+            model.load_state_dict(ckpt["model_state_dict"])
+            if "best_test_acc" in ckpt:
+                known_clean_acc = float(ckpt["best_test_acc"])
+        else:
+            model.load_state_dict(ckpt)
     else:
         model.load_state_dict(ckpt)
 
@@ -222,7 +223,7 @@ def evaluate_full(model, test_loader, criterion, device,
 def run_global_sensitivity(model, test_loader, criterion, device,
                            model_name: str, output_subdir: str,
                            pert_type: str,
-                           alpha_list=None, noise_list=None):
+                           alpha_list=None, noise_list=None, dataset="cifar10"):
     """
     对指定扰动类型执行全量精度扫描并保存 CSV。
 
@@ -241,7 +242,7 @@ def run_global_sensitivity(model, test_loader, criterion, device,
     results = []
     for p in params:
         # 重新加载干净权重（从 model_name 对应的 checkpoint）
-        _reload_model_weights(model, model_name, device)
+        _reload_model_weights(model, model_name, device, dataset=dataset)
 
         if pert_type == "nonlinearity":
             acc, loss = evaluate_full(model, test_loader, criterion, device,
@@ -267,20 +268,29 @@ def run_global_sensitivity(model, test_loader, criterion, device,
 
 
 # 重载干净权重：保证每个扰动强度从同干净模型出发，避免状态污染
-def _reload_model_weights(model, model_name, device):
+def _reload_model_weights(model, model_name, device, dataset="cifar10"):
+    ckpt_root = get_ckpt_root(dataset)
     if model_name == "simple_cnn":
-        path = "./checkpoints/simple_cnn/best_model.pth"
+        path = os.path.join(ckpt_root, "simple_cnn", "best_model.pth")
     elif model_name == "exp2":
-        path = "./checkpoints/Exp2_Calib+Layerwise_simplecnn/best_model.pth"
+        path = os.path.join(ckpt_root, "Exp2_Calib+Layerwise_simplecnn", "best_model.pth")
     elif model_name == "vgg11":
-        path = "./checkpoints/vgg11/best_model.pth"
+        path = os.path.join(ckpt_root, "vgg11", "best_model.pth")
     elif model_name == "resnet18":
-        path = "./checkpoints/resnet18/best_model.pth"
+        path = os.path.join(ckpt_root, "resnet18", "best_model.pth")
     else:
         return
     ckpt = torch.load(path, map_location=device)
-    if isinstance(ckpt, dict) and "model_state_dict" in ckpt:
-        model.load_state_dict(ckpt["model_state_dict"])
+    if isinstance(ckpt, dict):
+        ckpt_dataset = ckpt.get("dataset", "cifar10")
+        print(f"[Ext2] checkpoint 数据集来源: {ckpt_dataset}")
+        if ckpt_dataset != dataset:
+            print(f"[Ext2] WARNING: checkpoint 数据集 ({ckpt_dataset}) 与当前 dataset "
+                  f"({dataset}) 不一致，可能导致 load_state_dict 形状不匹配")
+        if "model_state_dict" in ckpt:
+            model.load_state_dict(ckpt["model_state_dict"])
+        else:
+            model.load_state_dict(ckpt)
     else:
         model.load_state_dict(ckpt)
     model.to(device)
@@ -366,7 +376,7 @@ def compute_metrics_pair(clean_out: torch.Tensor, dist_out: torch.Tensor):
 # ------------------------------------------------------------------
 def run_layer_shift(model, fixed_imgs, fixed_lbls, criterion, device,
                     model_name, output_subdir, pert_type,
-                    alpha_list=None, noise_list=None):
+                    alpha_list=None, noise_list=None, dataset="cifar10"):
     """
     对指定扰动类型的层偏移分析：
         - 先取无扰动 (α=0 或 σ=0) 作为 clean 基线层输出
@@ -401,7 +411,7 @@ def run_layer_shift(model, fixed_imgs, fixed_lbls, criterion, device,
         raise ValueError
 
     # ---- Step B.0：一次 clean 参考推理 (无扰动) ----
-    _reload_model_weights(model, model_name, device)
+    _reload_model_weights(model, model_name, device, dataset=dataset)
     clean_layer_outputs = {}
     cap_hooks = _register_layer_capture_hooks(model, model_name, clean_layer_outputs)
     try:
@@ -431,7 +441,7 @@ def run_layer_shift(model, fixed_imgs, fixed_lbls, criterion, device,
     per_strength_cos = {}  # param_value -> dict(layer_name -> cos_sim)
 
     for p in params:
-        _reload_model_weights(model, model_name, device)
+        _reload_model_weights(model, model_name, device, dataset=dataset)
 
         # 注册扰动钩子
         if pert_type == "nonlinearity":
@@ -739,6 +749,11 @@ def parse_args():
         description="拓展研究2：高斯噪声 vs 非线性失真 鲁棒性影响机制对比"
     )
     parser.add_argument(
+        "--dataset", type=str, default="cifar10",
+        choices=["cifar10", "cifar100"],
+        help="数据集，默认: cifar10",
+    )
+    parser.add_argument(
         "--models", type=str, default="simple_cnn,exp2,resnet18",
         help="逗号分隔，可选 simple_cnn / exp2 / resnet18"
     )
@@ -760,7 +775,8 @@ def parse_args():
                         help="层分析固定样本数（默认 500）")
     parser.add_argument("--batch_size", type=int, default=128)
     parser.add_argument("--device", type=str, default=None, choices=["cuda", "cpu"])
-    parser.add_argument("--output_dir", type=str, default="./outputs/extension2_simplecnn")
+    parser.add_argument("--output_dir", type=str, default=None,
+                        help="输出目录，默认 {outputs_root}/extension2_{model_tag}")
     parser.add_argument("--seed", type=int, default=42)
     return parser.parse_args()
 
@@ -779,10 +795,15 @@ def main():
     alpha_list = [float(v) for v in args.alpha_values.split(",") if v.strip() != ""]
     noise_list = [float(v) for v in args.noise_levels.split(",") if v.strip() != ""]
 
+    # 输出目录
+    model_tag = model_list[0].replace("_", "") if model_list else "simplecnn"
+    if args.output_dir is None:
+        args.output_dir = os.path.join(get_outputs_root(args.dataset), f"extension2_{model_tag}")
     os.makedirs(args.output_dir, exist_ok=True)
 
     print("\n" + "=" * 70)
     print("【拓展研究2：高斯噪声 vs 非线性失真 鲁棒性影响机制对比】启动")
+    print(f"  数据集         : {args.dataset}")
     print(f"  Models       : {model_list}")
     print(f"  Perturbations: {pert_list}")
     print(f"  α 范围       : {alpha_list}")
@@ -793,7 +814,7 @@ def main():
     print("=" * 70)
 
     # Step 1：数据 & 固定样本
-    _, test_loader = get_dataloaders(batch_size=args.batch_size, num_workers=2)
+    _, test_loader = get_dataloaders(batch_size=args.batch_size, num_workers=2, dataset=args.dataset)
     fixed_imgs, fixed_lbls = collect_fixed_samples(
         test_loader, num_samples=args.num_samples, device=device
     )
@@ -814,7 +835,7 @@ def main():
         print(f"{'#'*70}")
 
         # 先加载模型 & 权重
-        model, known_clean = get_model_for_ext2(model_name, device)
+        model, known_clean = get_model_for_ext2(model_name, device, dataset=args.dataset)
         print(f"[Model] {model_name} 干净基线准确率 (已知): {known_clean:.2f}%")
 
         if model_name not in all_global_results:
@@ -830,6 +851,7 @@ def main():
                     model_name=model_name, output_subdir=output_subdir,
                     pert_type="nonlinearity",
                     alpha_list=alpha_list,
+                    dataset=args.dataset,
                 )
                 all_global_results[model_name]["nonlinearity"] = res
             else:
@@ -893,7 +915,7 @@ def main():
         print(f"\n- 模型: {model_name}")
         known_clean = None
         try:
-            _, kc = get_model_for_ext2(model_name, device)
+            _, kc = get_model_for_ext2(model_name, device, dataset=args.dataset)
             known_clean = kc
         except Exception:
             pass

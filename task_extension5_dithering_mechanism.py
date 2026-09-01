@@ -39,6 +39,7 @@ import torch.nn as nn
 from tqdm import tqdm
 
 from utils.data_loader import get_dataloaders
+from utils.paths import get_ckpt_root, get_outputs_root, get_num_classes
 from utils.nonlinearity import nonlinearity, register_nonlinearity_hooks, remove_hooks
 from utils.quantization import quantize_error
 
@@ -110,13 +111,18 @@ def create_model(model_name: str, num_classes: int = 10):
 
 
 def load_checkpoint(checkpoint_path: str, device: str):
-    """加载 checkpoint，兼容 dict（含 model_state_dict 键）与裸 state_dict。"""
     if not os.path.exists(checkpoint_path):
         raise FileNotFoundError(f"Checkpoint 不存在: {checkpoint_path}")
     ckpt = torch.load(checkpoint_path, map_location=device)
-    if isinstance(ckpt, dict) and "model_state_dict" in ckpt:
-        state_dict = ckpt["model_state_dict"]
-        best_acc = ckpt.get("best_test_acc", None)
+    if isinstance(ckpt, dict):
+        ckpt_dataset = ckpt.get("dataset", "cifar10")
+        print(f"  [Load] checkpoint 数据集来源: {ckpt_dataset}")
+        if "model_state_dict" in ckpt:
+            state_dict = ckpt["model_state_dict"]
+            best_acc = ckpt.get("best_test_acc", None)
+        else:
+            state_dict = ckpt
+            best_acc = None
     else:
         state_dict = ckpt
         best_acc = None
@@ -350,21 +356,19 @@ def evaluate_with_dose(
 # 5. 组(a)：复现校验
 # ======================================================================
 
-def run_group_a(model, test_loader, criterion, device, alpha, bits, output_dir):
-    """
-    组(a) 复现校验：扫描 bits ∈ {2,3,4,5,6,8}，检查 36.74%/43.27% 锚点。
-
-    验收标准：
-        - 8bit: 36.74% ± 0.5%
-        - 4bit: 43.27% ± 0.5%
-        - 逐点与 extension3 比较（5 个重叠点容差 ±0.1%）
-    """
+def run_group_a(model, test_loader, criterion, device, alpha, bits, output_dir, dataset="cifar10"):
+    """组(a) 复现校验：扫描 bits ∈ {2,3,4,5,6,8}，检查 36.74%/43.27% 锚点。"""
     print("\n" + "=" * 66)
     print("  组(a)：复现校验 — α=+0.3 下 bits 扫描")
     print("=" * 66)
 
-    # 扩展3 锚点数据（VGG-11, α=+0.3）
-    ext3_anchors = {2: 9.98, 3: 42.97, 4: 43.27, 6: 37.13, 8: 36.74}
+    # 锚点数据（仅 CIFAR-10 有效，CIFAR-100 清空）
+    if dataset == "cifar10":
+        ext3_anchors = {2: 9.98, 3: 42.97, 4: 43.27, 6: 37.13, 8: 36.74}
+    else:
+        print(f"[组(a)] 当前数据集为 {dataset}，锚点数值仅适用于 CIFAR-10，"
+              f"跳过锚点比对。")
+        ext3_anchors = {}
 
     results = []
     for nb in bits:
@@ -806,43 +810,36 @@ def run_h2_activation_stats(model, test_loader, device, alpha, bits, output_dir)
 # 10. 组(d)：三架构 Dithering 对照
 # ======================================================================
 
-def run_group_d(output_dir, ext3_root):
+def run_group_d(output_dir, ext3_root=None, dataset="cifar10"):
     """
     组(d) 三架构 Dithering 对照。
 
     从 extension3 现有 CSV 读取 α=+0.3 下的 bits 精度数据，
     绘制三架构叠加图并生成汇总表。
-
-    数据来源（只读，不修改）：
-        - {ext3_root}/extension3_vgg11/vgg11_joint_error.csv
-        - {ext3_root}/extension3_simplecnn/simple_cnn_joint_error.csv
-        - {ext3_root}/extension3_resnet18/resnet18_joint_error.csv
-
-    MaxPool 次数：SimpleCNN=2, VGG-11=5, ResNet-18=0
     """
+    ext3_actual_root = ext3_root if ext3_root is not None else get_outputs_root(dataset)
     print("\n" + "=" * 66)
     print("  组(d)：三架构 Dithering 对照")
     print("=" * 66)
 
-    # 架构配置
     arch_configs = [
         {
             "name": "simple_cnn",
             "display": "SimpleCNN",
             "maxpool": 2,
-            "csv_path": os.path.join(ext3_root, "extension3_simplecnn", "simple_cnn_joint_error.csv"),
+            "csv_path": os.path.join(ext3_actual_root, "extension3_simplecnn", "simple_cnn_joint_error.csv"),
         },
         {
             "name": "vgg11",
             "display": "VGG-11",
             "maxpool": 5,
-            "csv_path": os.path.join(ext3_root, "extension3_vgg11", "vgg11_joint_error.csv"),
+            "csv_path": os.path.join(ext3_actual_root, "extension3_vgg11", "vgg11_joint_error.csv"),
         },
         {
             "name": "resnet18",
             "display": "ResNet-18",
             "maxpool": 0,
-            "csv_path": os.path.join(ext3_root, "extension3_resnet18", "resnet18_joint_error.csv"),
+            "csv_path": os.path.join(ext3_actual_root, "extension3_resnet18", "resnet18_joint_error.csv"),
         },
     ]
 
@@ -1164,6 +1161,11 @@ def parse_args():
         description="Extension 5: Dithering 效应定量机理解析"
     )
     parser.add_argument(
+        "--dataset", type=str, default="cifar10",
+        choices=["cifar10", "cifar100"],
+        help="数据集，默认: cifar10",
+    )
+    parser.add_argument(
         "--model", type=str, default="vgg11",
         help="主分析模型名称（默认: vgg11）",
     )
@@ -1187,9 +1189,8 @@ def parse_args():
         help="逗号分隔的噪声强度列表（默认: 0.005,0.01,...,0.5）",
     )
     parser.add_argument(
-        "--output_dir", type=str,
-        default="./outputs/extension5_dithering_vgg11/",
-        help="输出目录（默认: ./outputs/extension5_dithering_vgg11/）",
+        "--output_dir", type=str, default=None,
+        help="输出目录，默认 {outputs_root}/extension5_dithering_{model}/",
     )
     parser.add_argument(
         "--batch_size", type=int, default=128,
@@ -1204,11 +1205,11 @@ def parse_args():
         help="推理设备（默认自动选择）",
     )
     parser.add_argument(
-        "--checkpoint_root", type=str, default="./checkpoints",
-        help="checkpoint 根目录（默认: ./checkpoints）",
+        "--checkpoint_root", type=str, default=None,
+        help="checkpoint 根目录，默认 {ckpt_root}",
     )
     parser.add_argument(
-        "--ext3_root", type=str, default="./outputs",
+        "--ext3_root", type=str, default=None,
         help="extension3 输出根目录，组(d) 读取用（默认: ./outputs）",
     )
     return parser.parse_args()
@@ -1223,7 +1224,15 @@ def main():
 
     # ---- Step 0: 准备 ----
     set_seed(args.seed)
+
+    model_name = args.model
+    model_tag = model_name.replace("_", "")
+    if args.checkpoint_root is None:
+        args.checkpoint_root = get_ckpt_root(args.dataset)
+    if args.output_dir is None:
+        args.output_dir = os.path.join(get_outputs_root(args.dataset), f"extension5_dithering_{model_tag}")
     os.makedirs(args.output_dir, exist_ok=True)
+    print(f"[Extension5] 数据集: {args.dataset}, 类别数: {get_num_classes(args.dataset)}")
     print(f"[Extension5] 输出目录: {os.path.abspath(args.output_dir)}")
 
     model_name = args.model
@@ -1246,8 +1255,8 @@ def main():
 
     # ---- Step 1: 加载数据 ----
     print("\n" + "-" * 60)
-    print("[Extension5] 加载 CIFAR-10 测试集 ...")
-    _, test_loader = get_dataloaders(batch_size=args.batch_size, num_workers=2)
+    print(f"[Extension5] 加载 {args.dataset.upper()} 测试集 ...")
+    _, test_loader = get_dataloaders(batch_size=args.batch_size, num_workers=2, dataset=args.dataset)
     criterion = nn.CrossEntropyLoss()
 
     # ---- Step 2: 加载模型 ----
@@ -1255,7 +1264,7 @@ def main():
     print(f"[Extension5] 加载模型: {model_name}")
     checkpoint_path = os.path.join(args.checkpoint_root, model_name, "best_model.pth")
     print(f"[Extension5] Checkpoint: {checkpoint_path}")
-    model = create_model(model_name, num_classes=10)
+    model = create_model(model_name, num_classes=get_num_classes(args.dataset))
     state_dict, best_acc = load_checkpoint(checkpoint_path, device)
     model.load_state_dict(state_dict)
     model.to(device)
@@ -1269,6 +1278,7 @@ def main():
     print("#" * 70)
     group_a_results = run_group_a(
         model, test_loader, criterion, device, alpha, bits, args.output_dir,
+        dataset=args.dataset,
     )
 
     # 锚点自检
@@ -1314,7 +1324,7 @@ def main():
     print("\n" + "#" * 70)
     print("# 组(d)：三架构 Dithering 对照")
     print("#" * 70)
-    arch_data = run_group_d(args.output_dir, args.ext3_root)
+    arch_data = run_group_d(args.output_dir, ext3_root=args.ext3_root, dataset=args.dataset)
 
     # ---- Step 9: 绘图 ----
     print("\n" + "-" * 60)

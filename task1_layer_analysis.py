@@ -31,6 +31,7 @@ matplotlib.rcParams['axes.unicode_minus'] = False
 import matplotlib.pyplot as plt
 
 from utils.data_loader import get_dataloaders
+from utils.paths import get_ckpt_root, get_outputs_root, get_num_classes
 from utils.nonlinearity import (
     register_nonlinearity_hooks,
     remove_hooks,
@@ -72,21 +73,27 @@ def get_model(model_name: str, num_classes: int = 10):
 def parse_args():
     parser = argparse.ArgumentParser(description="Task1: 层分布偏移与误差累积分析")
     parser.add_argument(
+        "--dataset", type=str, default="cifar10",
+        choices=["cifar10", "cifar100"],
+        help="数据集，默认: cifar10",
+    )
+    parser.add_argument(
         "--alpha_values", type=str,
         default="-0.3,-0.2,-0.1,0.0,0.1,0.2,0.3",
         help="逗号分隔的 alpha 值列表"
     )
     parser.add_argument("--model", type=str, default="simple_cnn", help="模型名称")
     parser.add_argument(
-        "--checkpoint", type=str,
-        default="./checkpoints/simple_cnn/best_model.pth",
-        help="模型权重 checkpoint 路径"
+        "--checkpoint", type=str, default=None,
+        help="模型权重 checkpoint 路径，默认自动拼接"
     )
     parser.add_argument("--batch_size", type=int, default=128)
     parser.add_argument(
         "--device", type=str, default=None, choices=["cuda", "cpu"])
     parser.add_argument(
-        "--output_dir", type=str, default="./outputs/task1")
+        "--output_dir", type=str, default=None,
+        help="输出目录，默认 {outputs_root}/task1_{model_tag}"
+    )
     parser.add_argument(
         "--num_samples", type=int, default=500,
         help="用于层分析的测试样本数量（取前 num_samples 张，所有 alpha 共享）")
@@ -283,6 +290,11 @@ def compute_metrics(clean_out: torch.Tensor, dist_out: torch.Tensor):
 def main():
     args = parse_args()
     set_seed(args.seed)
+    model_tag = args.model.replace("-", "_")
+    if args.checkpoint is None:
+        args.checkpoint = os.path.join(get_ckpt_root(args.dataset), args.model, "best_model.pth")
+    if args.output_dir is None:
+        args.output_dir = os.path.join(get_outputs_root(args.dataset), f"task1_{model_tag}")
     os.makedirs(args.output_dir, exist_ok=True)
 
     # 解析 alpha 列表
@@ -300,10 +312,18 @@ def main():
     # ---- Step1: 加载模型和权重
     if not os.path.exists(args.checkpoint):
         raise FileNotFoundError(f"Checkpoint 不存在: {args.checkpoint}")
-    model = get_model(args.model, num_classes=10)
+    model = get_model(args.model, num_classes=get_num_classes(args.dataset))
     ckpt = torch.load(args.checkpoint, map_location=device)
-    if isinstance(ckpt, dict) and "model_state_dict" in ckpt:
-        state_dict = ckpt["model_state_dict"]
+    if isinstance(ckpt, dict):
+        ckpt_dataset = ckpt.get("dataset", "cifar10")
+        print(f"[Task1 Layer] checkpoint 数据集来源: {ckpt_dataset}")
+        if ckpt_dataset != args.dataset:
+            print(f"[Task1 Layer] WARNING: checkpoint 数据集 ({ckpt_dataset}) 与当前 --dataset "
+                  f"({args.dataset}) 不一致。")
+        if "model_state_dict" in ckpt:
+            state_dict = ckpt["model_state_dict"]
+        else:
+            state_dict = ckpt
     else:
         state_dict = ckpt
     model.load_state_dict(state_dict)
@@ -312,7 +332,7 @@ def main():
     print(f"[Task1 Layer] 模型与权重加载完成")
 
     # ---- Step2: 获取固定测试样本
-    _, test_loader = get_dataloaders(batch_size=args.batch_size, num_workers=2)
+    _, test_loader = get_dataloaders(batch_size=args.batch_size, num_workers=2, dataset=args.dataset)
     fixed_images, _ = collect_fixed_samples(test_loader, args.num_samples, device)
     print(f"[Task1 Layer] 固定分析样本数: {fixed_images.shape[0]}")
 

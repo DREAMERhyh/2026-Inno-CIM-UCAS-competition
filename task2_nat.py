@@ -47,6 +47,7 @@ from tqdm import tqdm
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 from utils.data_loader import get_dataloaders
+from utils.paths import get_ckpt_root, get_outputs_root, get_num_classes, CIFAR10_CLASSES
 from utils.nonlinearity import (
     register_nonlinearity_hooks,
     remove_hooks,
@@ -103,12 +104,6 @@ def get_model(model_name: str, num_classes: int = 10):
         raise ValueError(f"不支持的模型名称: '{model_name}'，当前已支持: simple_cnn, resnet18, vgg11")
 
 
-# CIFAR-10 固定类别名称（用于混淆矩阵绘制）
-CIFAR10_CLASSES = [
-    "airplane", "automobile", "bird", "cat", "deer",
-    "dog", "frog", "horse", "ship", "truck"
-]
-
 # 与任务1完全一致的 α 扫描列表（保证对比的横轴一致）
 TASK1_ALPHA_LIST = [-0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3]
 
@@ -152,6 +147,9 @@ class TrainerNAT:
         alpha_mode: str = "random",
         alpha_range=(-0.3, 0.3),
         alpha_fixed: float = 0.3,
+        # ====== 双数据集支持参数 ======
+        num_classes: int = 10,
+        dataset: str = "cifar10",
     ):
         """
         初始化 TrainerNAT。
@@ -204,6 +202,10 @@ class TrainerNAT:
         self.alpha_mode = alpha_mode
         self.alpha_range = tuple(alpha_range)
         self.alpha_fixed = alpha_fixed
+
+        # 双数据集支持
+        self.num_classes = num_classes
+        self.dataset = dataset
 
         self.model.to(self.device)
 
@@ -307,14 +309,13 @@ class TrainerNAT:
 
     # -------- 保存最佳权重 --------
     def _save_best_checkpoint(self, epoch, test_acc):
-        """保存最佳模型权重为 dict 格式，包含 epoch/model/optim/best_acc
-        """
         save_path = os.path.join(self.save_dir_checkpoint, "best_model.pth")
         torch.save({
             "epoch": epoch,
             "model_state_dict": self.model.state_dict(),
             "optimizer_state_dict": self.optimizer.state_dict(),
             "best_test_acc": test_acc,
+            "dataset": self.dataset,
         }, save_path)
         return save_path
 
@@ -361,10 +362,17 @@ class TrainerNAT:
 
     # -------- 绘制混淆矩阵 --------
     def _plot_confusion_matrix(self, all_labels, all_preds):
-        cm = confusion_matrix(all_labels, all_preds)
+        cm = confusion_matrix(all_labels, all_preds, labels=list(range(self.num_classes)))
         fig, ax = plt.subplots(figsize=(9, 8), dpi=120)
-        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=CIFAR10_CLASSES)
+        if self.num_classes > 10:
+            display_labels = None
+        else:
+            display_labels = CIFAR10_CLASSES
+        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=display_labels)
         disp.plot(cmap=plt.cm.Blues, ax=ax, values_format="d")
+        if self.num_classes > 10:
+            ax.set_xticks([])
+            ax.set_yticks([])
         ax.set_title(f"Confusion Matrix - Test Set (NAT {self.model_name})", fontsize=13, fontweight="bold")
         plt.xticks(rotation=45)
         plt.tight_layout()
@@ -376,6 +384,7 @@ class TrainerNAT:
     # -------- 保存 metrics.json --------
     def _save_metrics(self, final_all_labels=None, final_all_preds=None):
         metrics = {
+            "dataset": self.dataset,
             "best_test_acc": self.best_test_acc,
             "best_epoch": self.best_epoch,
             "total_epochs": self.num_epochs,
@@ -490,12 +499,18 @@ def evaluate_alpha_scan(
     if not os.path.exists(checkpoint_path):
         raise FileNotFoundError(f"NAT 训练权重不存在: {checkpoint_path}")
     ckpt = torch.load(checkpoint_path, map_location=device)
-    if isinstance(ckpt, dict) and "model_state_dict" in ckpt:
-        model.load_state_dict(ckpt["model_state_dict"])
-        print(f"[α 扫描] 已加载最佳权重: {checkpoint_path} (Epoch={ckpt['epoch']}, Acc={ckpt['best_test_acc']:.2f}%)")
+    if isinstance(ckpt, dict):
+        ckpt_dataset = ckpt.get("dataset", "cifar10")
+        print(f"[α 扫描] checkpoint 数据集来源: {ckpt_dataset}")
+        if "model_state_dict" in ckpt:
+            model.load_state_dict(ckpt["model_state_dict"])
+            print(f"[α 扫描] 已加载最佳权重: {checkpoint_path} (Epoch={ckpt['epoch']}, Acc={ckpt['best_test_acc']:.2f}%)")
+        else:
+            model.load_state_dict(ckpt)
+            print(f"[α 扫描] 已加载权重 (直接 state_dict)")
     else:
         model.load_state_dict(ckpt)
-        print(f"[α 扫描] 已加载权重 (直接 state_dict)")
+        print(f"[α 扫描] 已加载权重 (非 dict)")
 
     model.to(device)
     model.eval()
@@ -607,13 +622,18 @@ def parse_args():
     parser = argparse.ArgumentParser(description="任务2：非线性感知训练（NAT）统一入口")
 
     parser.add_argument(
+        "--dataset", type=str, default="cifar10",
+        choices=["cifar10", "cifar100"],
+        help="数据集，默认: cifar10",
+    )
+    parser.add_argument(
         "--mode", type=str, required=True, choices=["finetune", "scratch"],
         help="训练模式：finetune=从干净预训练权重继续训练；scratch=随机初始化全程非线性感知训练",
     )
     parser.add_argument("--model", type=str, default="simple_cnn", help="模型名称，默认 simple_cnn")
     parser.add_argument(
-        "--checkpoint", type=str, default="./checkpoints/simple_cnn/best_model.pth",
-        help="仅在 mode=finetune 时使用，指向干净预训练权重路径",
+        "--checkpoint", type=str, default=None,
+        help="仅在 mode=finetune 时使用，默认自动拼接 {ckpt_root}/{model}/best_model.pth",
     )
 
     parser.add_argument(
@@ -632,9 +652,13 @@ def parse_args():
     parser.add_argument("--weight_decay", type=float, default=1e-4)
     parser.add_argument("--momentum", type=float, default=0.9)
     parser.add_argument("--device", type=str, default=None, choices=["cuda", "cpu"])
+    parser.add_argument("--batch_size", type=int, default=128)
     parser.add_argument("--num_workers", type=int, default=2)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--output_dir", type=str, default="./outputs/task2_simplecnn", help="任务2输出根目录")
+    parser.add_argument(
+        "--output_dir", type=str, default=None,
+        help="任务2输出根目录，默认 {outputs_root}/task2_{model_tag}/{mode}"
+    )
     parser.add_argument("--patience", type=int, default=None, help="早停 patience（None 不启用)")
 
     return parser.parse_args()
@@ -671,19 +695,25 @@ def main():
     # 目录：根据 mode 创建子目录，自动包含模型名（simple_cnn → simplecnn，与目录重命名对齐）
     mode_tag = "finetune" if args.mode == "finetune" else "scratch"
     model_tag = args.model.replace("_", "")
-    save_dir_checkpoint = f"./checkpoints/nat_{args.mode}_{model_tag}"
-    save_dir_output = f"./outputs/task2_{model_tag}/{args.mode}"
+    save_dir_checkpoint = os.path.join(get_ckpt_root(args.dataset), f"nat_{args.mode}_{model_tag}")
+    if args.output_dir is not None:
+        save_dir_output = args.output_dir
+    else:
+        save_dir_output = os.path.join(get_outputs_root(args.dataset), f"task2_{model_tag}", args.mode)
     os.makedirs(save_dir_checkpoint, exist_ok=True)
     os.makedirs(save_dir_output, exist_ok=True)
 
-    # 动态确定 task1 基线 CSV 路径（与任务1输出目录命名规则一致）
-    task1_csv_path = f"./outputs/task1_{model_tag}/alpha_sensitivity.csv"
+    # 动态确定 task1 基线 CSV 路径
+    task1_csv_path = os.path.join(get_outputs_root(args.dataset), f"task1_{model_tag}", "alpha_sensitivity.csv")
+    print(f"[Task2] 数据集: {args.dataset}, 类别数: {get_num_classes(args.dataset)}")
     print(f"[Task2] 任务1基线 CSV 路径: {task1_csv_path}")
 
     # 打印完整配置摘要
     print("\n" + "=" * 70)
     print("[任务2：非线性感知训练（NAT）")
     print("=" * 70)
+    print(f"  数据集 (dataset)         : {args.dataset}")
+    print(f"  类别数 (num_classes)     : {get_num_classes(args.dataset)}")
     print(f"  训练模式 (mode)          : {args.mode}")
     print(f"  模型 (model)              : {args.model}")
     if args.mode == "finetune":
@@ -705,28 +735,43 @@ def main():
     print("=" * 70)
 
     # -------- Step1：加载数据 --------
-    print("\n[Step1] 加载 CIFAR-10 数据集...")
+    print(f"\n[Step1] 加载 {args.dataset.upper()} 数据集...")
     train_loader, test_loader = get_dataloaders(
-        batch_size=args.batch_size if hasattr(args, "batch_size") and args.batch_size else 128,
+        batch_size=args.batch_size,
         num_workers=args.num_workers,
+        dataset=args.dataset,
     )
 
     # -------- Step2：创建模型（finetune 加载预训练权重） --------
     print(f"\n[Step2] 创建模型: {args.model}")
-    model = get_model(args.model, num_classes=10)
+    model = get_model(args.model, num_classes=get_num_classes(args.dataset))
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"[Model] 总参数量: {total_params:,}，可训练: {trainable_params:,}")
 
     if args.mode == "finetune":
+        if args.checkpoint is None:
+            args.checkpoint = os.path.join(get_ckpt_root(args.dataset), args.model, "best_model.pth")
         if not os.path.exists(args.checkpoint):
-            raise FileNotFoundError(f"finetune 模式下未找到预训练权重: {args.checkpoint}")
+            raise FileNotFoundError(
+                f"finetune 模式下未找到预训练权重: {args.checkpoint}\n"
+                f"请先运行: python train.py --model {args.model} --dataset {args.dataset}"
+            )
         ckpt = torch.load(args.checkpoint, map_location=device)
-        if isinstance(ckpt, dict) and "model_state_dict" in ckpt:
-            model.load_state_dict(ckpt["model_state_dict"])
-            print(f"[Finetune] 已加载干净预训练权重: {args.checkpoint}")
-            if "best_test_acc" in ckpt:
-                print(f"[Finetune] 干净模型历史最佳准确率 = {float(ckpt['best_test_acc']):.2f}%")
+        if isinstance(ckpt, dict):
+            ckpt_dataset = ckpt.get("dataset", "cifar10")
+            print(f"[Finetune] checkpoint 数据集来源: {ckpt_dataset}")
+            if ckpt_dataset != args.dataset:
+                print(f"[Finetune] WARNING: checkpoint 数据集 ({ckpt_dataset}) 与当前 --dataset "
+                      f"({args.dataset}) 不一致，按兼容模式继续加载。")
+            if "model_state_dict" in ckpt:
+                model.load_state_dict(ckpt["model_state_dict"])
+                print(f"[Finetune] 已加载干净预训练权重: {args.checkpoint}")
+                if "best_test_acc" in ckpt:
+                    print(f"[Finetune] 干净模型历史最佳准确率 = {float(ckpt['best_test_acc']):.2f}%")
+            else:
+                model.load_state_dict(ckpt)
+                print(f"[Finetune] 已加载干净权重（直接 state_dict）: {args.checkpoint}")
         else:
             model.load_state_dict(ckpt)
             print(f"[Finetune] 已加载干净权重（直接 state_dict）: {args.checkpoint}")
@@ -762,13 +807,15 @@ def main():
         alpha_mode=args.alpha_mode,
         alpha_range=alpha_range,
         alpha_fixed=args.alpha_fixed,
+        num_classes=get_num_classes(args.dataset),
+        dataset=args.dataset,
     )
     trainer_nat.train()
 
     # -------- Step6：α 敏感性扫描 --------
     best_ckpt_path = os.path.join(save_dir_checkpoint, "best_model.pth")
     nat_scan_results = evaluate_alpha_scan(
-        model=get_model(args.model, 10),  # 用一个新的模型实例再装权重，避免 trainer 内状态干扰
+        model=get_model(args.model, num_classes=get_num_classes(args.dataset)),
         test_loader=test_loader,
         criterion=criterion,
         device=device,
@@ -793,6 +840,7 @@ def main():
             m = json.load(f)
         m["nat_train_mode"] = args.mode
         m["checkpoint_used"] = args.checkpoint if args.mode == "finetune" else None
+        m["dataset"] = args.dataset
         with open(metrics_path, "w", encoding="utf-8") as f:
             json.dump(m, f, indent=4, ensure_ascii=False)
 

@@ -42,6 +42,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 from utils.data_loader import get_dataloaders
+from utils.paths import get_ckpt_root, get_outputs_root, get_num_classes
 from utils.quantization import (
     register_joint_error_hooks,
     remove_hooks,
@@ -84,13 +85,13 @@ def get_model(model_name: str, num_classes: int = 10):
         raise ValueError(f"不支持的模型名称 '{model_name}'，当前已支持 simple_cnn, exp2, resnet18, vgg11")
 
 
-def _model_checkpoint_path(model_name: str) -> str:
-    """model_name → 默认 checkpoint 路径（与项目已有路径规范一致）。"""
+def _model_checkpoint_path(model_name: str, dataset: str = "cifar10") -> str:
+    ckpt_root = get_ckpt_root(dataset)
     mapping = {
-        "simple_cnn": "./checkpoints/simple_cnn/best_model.pth",
-        "exp2": "./checkpoints/Exp2_Calib+Layerwise_simplecnn/best_model.pth",
-        "resnet18": "./checkpoints/resnet18/best_model.pth",
-        "vgg11":   "./checkpoints/vgg11/best_model.pth",
+        "simple_cnn": os.path.join(ckpt_root, "simple_cnn", "best_model.pth"),
+        "exp2": os.path.join(ckpt_root, "Exp2_Calib+Layerwise_simplecnn", "best_model.pth"),
+        "resnet18": os.path.join(ckpt_root, "resnet18", "best_model.pth"),
+        "vgg11": os.path.join(ckpt_root, "vgg11", "best_model.pth"),
     }
     if model_name not in mapping:
         raise ValueError(f"未知模型 {model_name}，无法映射 checkpoint 路径")
@@ -121,27 +122,32 @@ def evaluate_on_test(model, test_loader, criterion, device):
 # ------------------------------------------------------------------
 # Step 2：模型加载 + 干净权重快照（每个组合重载）
 # ------------------------------------------------------------------
-def load_model_for_ext3(model_name: str, device: str):
+def load_model_for_ext3(model_name: str, device: str, dataset: str = "cifar10"):
     """
     根据 model_name 创建模型并加载默认 checkpoint；打印参数量。
     返回 (model.to(device).eval(), clean_state_dict_cpu_deepcopy, known_clean_acc)
     """
-    ckpt_path = _model_checkpoint_path(model_name)
+    ckpt_path = _model_checkpoint_path(model_name, dataset=dataset)
     if not os.path.exists(ckpt_path):
         raise FileNotFoundError(f"[{model_name}] checkpoint 不存在: {ckpt_path}")
 
     print(f"  [Load] 创建模型: {model_name}")
-    model = get_model(model_name, num_classes=10)
+    model = get_model(model_name, num_classes=get_num_classes(dataset))
     total_params = sum(p.numel() for p in model.parameters())
     print(f"  [Load] 总参数量: {total_params:,}")
 
     ckpt = torch.load(ckpt_path, map_location=device)
     known_clean_acc = None
-    if isinstance(ckpt, dict) and "model_state_dict" in ckpt:
-        model.load_state_dict(ckpt["model_state_dict"])
-        if "best_test_acc" in ckpt:
-            known_clean_acc = float(ckpt["best_test_acc"])
-            print(f"  [Load] checkpoint 记录的干净准确率: {known_clean_acc:.2f}%")
+    if isinstance(ckpt, dict):
+        ckpt_dataset = ckpt.get("dataset", "cifar10")
+        print(f"  [Load] checkpoint 数据集来源: {ckpt_dataset}")
+        if "model_state_dict" in ckpt:
+            model.load_state_dict(ckpt["model_state_dict"])
+            if "best_test_acc" in ckpt:
+                known_clean_acc = float(ckpt["best_test_acc"])
+                print(f"  [Load] checkpoint 记录的干净准确率: {known_clean_acc:.2f}%")
+        else:
+            model.load_state_dict(ckpt)
     else:
         model.load_state_dict(ckpt)
 
@@ -154,7 +160,7 @@ def load_model_for_ext3(model_name: str, device: str):
 # Step 3：单独量化误差扫描
 # ------------------------------------------------------------------
 def run_quantization_only(model_name, device, num_bits_list, test_loader, criterion, output_dir,
-                          clean_state_dict_snapshot=None, reload_model_each=True):
+                          clean_state_dict_snapshot=None, reload_model_each=True, dataset="cifar10"):
     """
     仅量化误差扫描：apply_nonlinearity=False, apply_quantization=True。
     对每个 num_bits_list 中的 bit 值 → 全量 10K 推理 → 写 CSV。
@@ -162,9 +168,9 @@ def run_quantization_only(model_name, device, num_bits_list, test_loader, criter
     print(f"\n  ====== [{model_name}] 单独量化误差扫描（{len(num_bits_list)} 个 bit 值） ======")
     if clean_state_dict_snapshot is None or reload_model_each:
         # 重新加载得到 model + 干净权重快照
-        model, clean_state_dict, _ = load_model_for_ext3(model_name, device)
+        model, clean_state_dict, _ = load_model_for_ext3(model_name, device, dataset=dataset)
     else:
-        model = get_model(model_name, 10).to(device).eval()
+        model = get_model(model_name, get_num_classes(dataset)).to(device).eval()
         clean_state_dict = clean_state_dict_snapshot
         model.load_state_dict(clean_state_dict)
 
@@ -203,7 +209,7 @@ def run_quantization_only(model_name, device, num_bits_list, test_loader, criter
 # Step 4：联合误差扫描（α × bit 网格）
 # ------------------------------------------------------------------
 def run_joint_error(model_name, device, alpha_list, num_bits_list, test_loader, criterion, output_dir,
-                    clean_state_dict_snapshot=None):
+                    clean_state_dict_snapshot=None, dataset="cifar10"):
     """
     联合误差扫描：apply_nonlinearity=True, apply_quantization=True（两个开关都 True）
     网格：α ∈ alpha_list × bit ∈ num_bits_list。
@@ -211,9 +217,9 @@ def run_joint_error(model_name, device, alpha_list, num_bits_list, test_loader, 
     print(f"\n  ====== [{model_name}] 联合误差扫描（{len(alpha_list)} α × {len(num_bits_list)} bit = "
           f"{len(alpha_list) * len(num_bits_list)} 组合） ======")
     if clean_state_dict_snapshot is None:
-        model, clean_state_dict, _ = load_model_for_ext3(model_name, device)
+        model, clean_state_dict, _ = load_model_for_ext3(model_name, device, dataset=dataset)
     else:
-        model = get_model(model_name, 10).to(device).eval()
+        model = get_model(model_name, get_num_classes(dataset)).to(device).eval()
         clean_state_dict = clean_state_dict_snapshot
         model.load_state_dict(clean_state_dict)
 
@@ -384,7 +390,7 @@ def plot_joint_heatmap(model_list, output_dir, alpha_list, num_bits_list):
         print(f"  [Save] {fig_path}")
 
 
-def plot_joint_vs_alone(model_list, output_dir, target_bit=4):
+def plot_joint_vs_alone(model_list, output_dir, target_bit=4, dataset="cifar10"):
     """
     图3：联合 vs 单独对比曲线 joint_vs_alone_comparison.png
     对每个模型选取固定 bit=target_bit（默认 4，中等量化强度）
@@ -408,10 +414,9 @@ def plot_joint_vs_alone(model_list, output_dir, target_bit=4):
         # 优先读 task1 基线（对 simple_cnn 一定存在；exp2/resnet18 可能不存在）
         task1_csv = None
         if mn == "simple_cnn":
-            task1_csv = "./outputs/task1_simplecnn/alpha_sensitivity.csv"
+            task1_csv = os.path.join(get_outputs_root(dataset), "task1_simplecnn", "alpha_sensitivity.csv")
         elif mn == "exp2":
-            # 尝试 task3 Exp2 输出目录
-            task1_csv = "./outputs/task3_simplecnn/Exp2_Calib+Layerwise/alpha_sensitivity.csv"
+            task1_csv = os.path.join(get_outputs_root(dataset), "task3_simplecnn", "Exp2_Calib+Layerwise", "alpha_sensitivity.csv")
         if task1_csv and os.path.exists(task1_csv):
             for r in read_csv_rows(task1_csv):
                 nonlinear_rows.append((float(r["alpha"]), float(r["accuracy"])))
@@ -535,7 +540,7 @@ def plot_robustness_under_joint(model_list, output_dir, target_bit=4):
 # ------------------------------------------------------------------
 # Step 6：汇总表 joint_error_summary.csv
 # ------------------------------------------------------------------
-def build_summary_csv(model_list, output_dir):
+def build_summary_csv(model_list, output_dir, dataset="cifar10"):
     """
     汇总三类数据：
         1. nonlinearity_only → 从 outputs/task1/alpha_sensitivity.csv（simple_cnn）/
@@ -548,10 +553,10 @@ def build_summary_csv(model_list, output_dir):
     for mn in model_list:
         # ---- 1. nonlinearity_only ----
         source1 = None
-        if mn == "simple_cnn" and os.path.exists("./outputs/task1_simplecnn/alpha_sensitivity.csv"):
-            source1 = "./outputs/task1_simplecnn/alpha_sensitivity.csv"
-        elif mn == "exp2" and os.path.exists("./outputs/task3_simplecnn/Exp2_Calib+Layerwise/alpha_sensitivity.csv"):
-            source1 = "./outputs/task3_simplecnn/Exp2_Calib+Layerwise/alpha_sensitivity.csv"
+        if mn == "simple_cnn" and os.path.exists(os.path.join(get_outputs_root(dataset), "task1_simplecnn", "alpha_sensitivity.csv")):
+            source1 = os.path.join(get_outputs_root(dataset), "task1_simplecnn", "alpha_sensitivity.csv")
+        elif mn == "exp2" and os.path.exists(os.path.join(get_outputs_root(dataset), "task3_simplecnn", "Exp2_Calib+Layerwise", "alpha_sensitivity.csv")):
+            source1 = os.path.join(get_outputs_root(dataset), "task3_simplecnn", "Exp2_Calib+Layerwise", "alpha_sensitivity.csv")
         if source1:
             for r in read_csv_rows(source1):
                 all_rows.append({
@@ -619,6 +624,11 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="拓展研究3：量化误差与非线性误差联合影响分析"
     )
+    parser.add_argument(
+        "--dataset", type=str, default="cifar10",
+        choices=["cifar10", "cifar100"],
+        help="数据集，默认: cifar10",
+    )
     parser.add_argument("--models", type=str, default="simple_cnn,exp2",
                         help="逗号分隔的模型列表（默认 simple_cnn,exp2）")
     parser.add_argument("--alpha_values", type=str,
@@ -628,7 +638,8 @@ def parse_args():
                         help="量化比特数扫描范围（逗号分隔）")
     parser.add_argument("--batch_size", type=int, default=128)
     parser.add_argument("--device", type=str, default=None, choices=["cuda", "cpu"])
-    parser.add_argument("--output_dir", type=str, default="./outputs/extension3_simplecnn")
+    parser.add_argument("--output_dir", type=str, default=None,
+                        help="输出目录，默认 {outputs_root}/extension3_simplecnn")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--target_bit", type=int, default=4,
                         help="图3/图4 固定对比的 bit 值（默认 4，中等强度量化）")
@@ -640,6 +651,9 @@ def main():
 
     # ---- Step 0：准备 ----
     set_seed(args.seed)
+
+    if args.output_dir is None:
+        args.output_dir = os.path.join(get_outputs_root(args.dataset), "extension3_simplecnn")
     os.makedirs(args.output_dir, exist_ok=True)
 
     model_list = [m.strip() for m in args.models.split(",") if m.strip()]
@@ -657,6 +671,7 @@ def main():
 
     print("\n" + "=" * 80)
     print("【拓展研究3：量化误差与非线性误差联合影响分析】启动")
+    print(f"  数据集              : {args.dataset}")
     print(f"  对比模型            : {model_list}")
     print(f"  α 扫描范围          : {alpha_list}")
     print(f"  量化 bit 范围       : {num_bits_list}")
@@ -670,13 +685,13 @@ def main():
 
     # ---- Step 1：加载数据 ----
     print("\n[Step 1] 加载 CIFAR-10 测试集 DataLoader ...")
-    _, test_loader = get_dataloaders(batch_size=args.batch_size, num_workers=2)
+    _, test_loader = get_dataloaders(batch_size=args.batch_size, num_workers=2, dataset=args.dataset)
     criterion = nn.CrossEntropyLoss()
 
     # ---- 先为每个模型获取干净权重快照（一次磁盘读取，后续所有扫描从内存 snapshot 重载） ----
     clean_snapshots = {}
     for mn in model_list:
-        _, cs, _ = load_model_for_ext3(mn, device)
+        _, cs, _ = load_model_for_ext3(mn, device, dataset=args.dataset)
         clean_snapshots[mn] = cs
 
     # ---- Step 3：单独量化 ----
@@ -689,6 +704,7 @@ def main():
             model_name=mn, device=device, num_bits_list=num_bits_list,
             test_loader=test_loader, criterion=criterion, output_dir=args.output_dir,
             clean_state_dict_snapshot=clean_snapshots[mn],
+            dataset=args.dataset,
         )
         quant_only_results[mn] = res
 
@@ -703,6 +719,7 @@ def main():
             num_bits_list=num_bits_list, test_loader=test_loader,
             criterion=criterion, output_dir=args.output_dir,
             clean_state_dict_snapshot=clean_snapshots[mn],
+            dataset=args.dataset,
         )
         joint_results[mn] = res
 
@@ -710,12 +727,12 @@ def main():
     print("\n[Step 5] 生成可视化图表 ...")
     plot_quantization_only(model_list, args.output_dir)
     plot_joint_heatmap(model_list, args.output_dir, alpha_list, num_bits_list)
-    plot_joint_vs_alone(model_list, args.output_dir, target_bit=args.target_bit)
+    plot_joint_vs_alone(model_list, args.output_dir, target_bit=args.target_bit, dataset=args.dataset)
     plot_robustness_under_joint(model_list, args.output_dir, target_bit=args.target_bit)
 
     # ---- Step 6：汇总 CSV ----
     print("\n[Step 6] 生成 joint_error_summary.csv ...")
-    build_summary_csv(model_list, args.output_dir)
+    build_summary_csv(model_list, args.output_dir, dataset=args.dataset)
 
     # ---- Step 7：终端中文摘要 ----
     print("\n" + "=" * 80)
