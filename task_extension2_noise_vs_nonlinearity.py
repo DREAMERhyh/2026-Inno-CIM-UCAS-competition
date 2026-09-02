@@ -860,6 +860,7 @@ def main():
                     model_name=model_name, output_subdir=output_subdir,
                     pert_type="gaussian",
                     noise_list=noise_list,
+                    dataset=args.dataset,  
                 )
                 all_global_results[model_name]["gaussian"] = res
 
@@ -870,6 +871,7 @@ def main():
                     model_name=model_name, output_subdir=output_subdir,
                     pert_type="nonlinearity",
                     alpha_list=alpha_list,
+                    dataset=args.dataset, 
                 )
                 all_layer_cos[model_name]["nonlinearity"] = cos_map
             else:
@@ -878,6 +880,7 @@ def main():
                     model_name=model_name, output_subdir=output_subdir,
                     pert_type="gaussian",
                     noise_list=noise_list,
+                    dataset=args.dataset, 
                 )
                 all_layer_cos[model_name]["gaussian"] = cos_map
 
