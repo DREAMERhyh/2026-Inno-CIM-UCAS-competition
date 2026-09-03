@@ -354,6 +354,12 @@ def main():
     # 根据当前模型动态选择观测层顺序，兼容 SimpleCNN / ResNet-18
     observe_layers_current = get_observe_layers(args.model)
     OBSERVE_LAYERS_ORDER = [out_name for (_, out_name) in observe_layers_current if out_name in clean_outputs]
+    # 【修复 VGG fc 缺失】OBSERVE_LAYERS_VGG11 元组列表只含 4 个 block（fc 由
+    # register_layer_capture_hooks 单独注册、不在列表内），导致 fc_output 即使
+    # 捕获成功也不会写入 CSV/曲线/摘要。此处若已成功捕获则追加到末尾。
+    # 对 SimpleCNN / ResNet-18 为空操作（fc 本就在列表中，条件不触发）。
+    if "fc_output" in clean_outputs and "fc_output" not in OBSERVE_LAYERS_ORDER:
+        OBSERVE_LAYERS_ORDER.append("fc_output")
     print(f"[Task1 Layer] 当前模型: {args.model}, 观测层顺序: {OBSERVE_LAYERS_ORDER}")
 
     # ---- Step5: 遍历 alpha ≠ 0.0，计算层偏移
