@@ -133,7 +133,8 @@ def train_linear(X, Y, nc, device, epochs=200, lr=0.05, wd=1e-4):
     return lin
 
 
-def train_readout_nat(model, loader, nc, device, epochs=6, lr=0.01, wd=1e-4, alpha_max=0.3, seed=42, limit=None):
+def train_readout_nat(model, loader, nc, device, epochs=6, lr=0.01, wd=1e-4, alpha_max=0.3, seed=42,
+                      limit=None, clean_ratio=0.0):
     """Readout-NAT：冻结主干，在每个 batch 上以**新的随机 α** 提取特征并更新读出。
 
     与 full-NAT 的区别：只训练最后的线性读出（主干冻结），成本 ≈ full-NAT 的 1/120。
@@ -149,7 +150,7 @@ def train_readout_nat(model, loader, nc, device, epochs=6, lr=0.01, wd=1e-4, alp
         tot = cor = 0
         for x, y in loader:
             x, y = x.to(device), y.to(device)
-            alpha = rng.uniform(-alpha_max, alpha_max)
+            alpha = 0.0 if rng.random() < clean_ratio else rng.uniform(-alpha_max, alpha_max)
             with torch.no_grad():
                 store = {}
                 h = READOUT.register_forward_pre_hook(lambda m, inp: store.__setitem__("f", inp[0]))
@@ -197,11 +198,15 @@ def main():
     ap.add_argument("--alpha", type=float, default=0.3, help="读出适配所用的失真强度")
     ap.add_argument("--epochs_nat", type=int, default=6, help="readout-NAT 的轮数")
     ap.add_argument("--n_train", type=int, default=0, help="限制读出训练样本数（0=全量 50k）")
+    ap.add_argument("--seed", type=int, default=42, help="随机种子")
+    ap.add_argument("--clean_ratio", type=float, default=0.0,
+                    help="readout-NAT 中干净样本比例（0=纯失真分布；0.3/0.5 用于缓解 clean 代价）")
     ap.add_argument("--device", default=None)
     args = ap.parse_args()
     device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
     # 全流程固定种子（读出训练用 Adam，需显式播种以保证可复现）
-    random.seed(42); np.random.seed(42); torch.manual_seed(42); torch.cuda.manual_seed_all(42)
+    random.seed(args.seed); np.random.seed(args.seed)
+    torch.manual_seed(args.seed); torch.cuda.manual_seed_all(args.seed)
     nc = get_num_classes(args.dataset)
     args.n_train = args.n_train or None  # 0 → None = 全量 50k
 
@@ -230,7 +235,8 @@ def main():
 
     print("[readout-repair] 训练 readout-NAT（α~U[±0.3] 分布上的读出）...")
     lin_nat = train_readout_nat(model, train_loader, nc, device, epochs=args.epochs_nat,
-                               limit=args.n_train)
+                               limit=args.n_train, seed=args.seed,
+                               clean_ratio=args.clean_ratio)
 
     readouts = {
         # 注意：不能用 model.fc(f)（会二次触发 fc 上的失真 pre-hook），改用函数式线性
@@ -252,7 +258,7 @@ def main():
 
     out_dir = os.path.join(get_outputs_root(args.dataset), "v3_readout_repair")
     os.makedirs(out_dir, exist_ok=True)
-    tag = f"n{args.n_train}" if args.n_train else "n50k"
+    tag = (f"n{args.n_train}" if args.n_train else "n50k") + (f"_s{args.seed}" if args.seed != 42 else "") + (f"_cr{args.clean_ratio}" if args.clean_ratio else "")
     p = os.path.join(out_dir, f"readout_repair_{args.model}_alpha{args.alpha:+.2f}_{tag}.csv")
     with open(p, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=["readout"] + [str(a) for a in alphas])
