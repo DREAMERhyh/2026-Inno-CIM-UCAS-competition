@@ -273,6 +273,10 @@ def parse_args():
         help="数据集，默认: cifar10",
     )
     parser.add_argument(
+        "--variant", type=str, default="exp2", choices=["exp2", "exp3"],
+        help="配方变体：exp2=校准+分层α（原协议）；exp3=校准+分层α+非对称采样",
+    )
+    parser.add_argument(
         "--models", type=str, default="vgg11,resnet18",
         help="逗号分隔的模型列表（默认: vgg11,resnet18）",
     )
@@ -311,8 +315,14 @@ def main():
 
     if args.checkpoint_root is None:
         args.checkpoint_root = get_ckpt_root(args.dataset)
+    # 变体解析（v3 新增：支持 Exp3 深层迁移的评估）
+    exp_name = "Exp2_Calib+Layerwise" if args.variant == "exp2" else "Exp3_FullRobust"
+    weight_type_name = "exp2_robust" if args.variant == "exp2" else "exp3_robust"
+    global WEIGHT_TYPE
+    WEIGHT_TYPE = weight_type_name
     if args.output_dir is None:
-        args.output_dir = os.path.join(get_outputs_root(args.dataset), "extension6_deep_robust")
+        sub = "extension6_deep_robust" if args.variant == "exp2" else "extension6_deep_robust/eval_exp3"
+        args.output_dir = os.path.join(get_outputs_root(args.dataset), sub)
     if args.ext4_csv is None:
         args.ext4_csv = os.path.join(get_outputs_root(args.dataset), "extension4_alpha_wide", "alpha_wide_scan_summary.csv")
     os.makedirs(args.output_dir, exist_ok=True)
@@ -343,7 +353,7 @@ def main():
         model_tag = model_name.replace("_", "")
         ckpt_path = os.path.join(
             args.checkpoint_root,
-            f"Exp2_Calib+Layerwise_{model_tag}",
+            f"{exp_name}_{model_tag}",
             "best_model.pth",
         )
         print(f"\n[Scan] model={model_name}, weight={WEIGHT_TYPE}")
@@ -396,7 +406,7 @@ def main():
         sys.exit(1)
 
     # Step 3：保存汇总 CSV
-    csv_path = os.path.join(args.output_dir, "alpha_wide_scan_deep_robust.csv")
+    csv_path = os.path.join(args.output_dir, ("alpha_wide_scan_deep_robust.csv" if args.variant == "exp2" else "alpha_wide_scan_deep_robust_exp3.csv"))
     fieldnames = ["model", "weight_type", "alpha", "accuracy", "loss", "is_extrapolation"]
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
