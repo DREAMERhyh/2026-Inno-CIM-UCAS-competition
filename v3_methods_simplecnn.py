@@ -216,7 +216,10 @@ def train(args, model, train_loader, test_loader, device, names):
             x, y = x.to(device), y.to(device)
             # ---- 采样本轮注入参数 ----
             if args.mode == "adv":
-                alphas = [torch.zeros((), device=device, requires_grad=True) for _ in names]
+                # 注意：不能初始化为 0 —— utils.nonlinearity 在 |α|<1e-12 时直接 return x，
+                # 会让梯度无法回传到 α（PGD 空转）。用随机重启（对抗训练标准做法）。
+                alphas = [torch.tensor(random.uniform(-0.3, 0.3), device=device,
+                                       requires_grad=True) for _ in names]
                 for _ in range(args.adv_steps):
                     hooks = alpha_vector_hooks(model, names, alphas)
                     try:
@@ -246,6 +249,9 @@ def train(args, model, train_loader, test_loader, device, names):
                     amap = {n: random.uniform(-half, half) for n in names}
                 elif args.mode == "budget":
                     amap = {n: random.uniform(-prof[n], prof[n]) for n in names}
+                elif args.mode == "range":
+                    r = args.alpha_max
+                    amap = {n: random.uniform(-r, r) for n in names}
                 else:  # joint / plain
                     amap = {n: random.uniform(-0.3, 0.3) for n in names}
                 extra_hooks = []
@@ -285,7 +291,7 @@ def train(args, model, train_loader, test_loader, device, names):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mode", required=True, choices=["budget", "adv", "curriculum", "joint"])
+    ap.add_argument("--mode", required=True, choices=["budget", "adv", "curriculum", "joint", "range"])
     ap.add_argument("--profile", default="uniform", choices=["uniform", "front", "rear", "sens"])
     ap.add_argument("--dataset", default="cifar100")
     ap.add_argument("--epochs", type=int, default=120)
@@ -294,9 +300,13 @@ def main():
     ap.add_argument("--weight_decay", type=float, default=1e-4)
     ap.add_argument("--batch_size", type=int, default=128)
     ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--alpha_max", type=float, default=0.3, help="range 模式的采样半宽（§4.7 外推边界测绘用）")
+    ap.add_argument("--eval_wide", action="store_true", help="最终评估用 15 点宽扫描（默认 7 点）")
     ap.add_argument("--adv_steps", type=int, default=2, help="PGD 内层步数")
     ap.add_argument("--adv_lr", type=float, default=0.1, help="PGD 内层步长")
     ap.add_argument("--tag", default="")
+    ap.add_argument("--num_workers", type=int, default=0,
+                    help="DataLoader 工作进程数（内存受限时保持 0）")
     ap.add_argument("--device", default=None)
     args = ap.parse_args()
     set_seed(args.seed)
@@ -308,6 +318,8 @@ def main():
     names = layer_names(model)
 
     name = f"{args.mode}_{args.profile}{args.tag}"
+    if args.mode == "range":
+        name = f"range_{args.alpha_max:.2f}{args.tag}"
     args.ckpt_dir = os.path.join(get_ckpt_root(args.dataset), f"v3_{name}")
     args.out_dir = os.path.join(get_outputs_root(args.dataset), "v3_methods", name)
     os.makedirs(args.ckpt_dir, exist_ok=True)
@@ -317,7 +329,7 @@ def main():
     print(f"[v3-methods] layers={names}")
     print(f"[v3-methods] ckpt={args.ckpt_dir}\n[v3-methods] out={args.out_dir}")
 
-    train_loader, test_loader = build_loaders(args.batch_size)
+    train_loader, test_loader = build_loaders(args.batch_size, args.num_workers)
     t0 = time.time()
     best_acc, best_epoch, final_a03, hist = train(args, model, train_loader, test_loader, device, names)
 
@@ -325,7 +337,9 @@ def main():
     ck = torch.load(os.path.join(args.ckpt_dir, "best_model.pth"), map_location=device)
     model.load_state_dict(ck["model_state_dict"])
     model.eval()
-    a7 = scan(model, test_loader, device, [-0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3])
+    eval_alphas = ([-0.6, -0.5, -0.4, -0.35, -0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.35, 0.4, 0.5, 0.6]
+                   if args.eval_wide else [-0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3])
+    a7 = scan(model, test_loader, device, eval_alphas)
     s6 = scan_gaussian(model, test_loader, device, [0.05, 0.1, 0.15, 0.2, 0.25, 0.3])
 
     with open(os.path.join(args.out_dir, "alpha_sensitivity.csv"), "w", newline="", encoding="utf-8") as f:
