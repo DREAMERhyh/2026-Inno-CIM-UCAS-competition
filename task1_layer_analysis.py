@@ -290,7 +290,7 @@ def compute_metrics(clean_out: torch.Tensor, dist_out: torch.Tensor):
 def main():
     args = parse_args()
     set_seed(args.seed)
-    model_tag = args.model.replace("-", "_")
+    model_tag = args.model.replace("_", "")
     if args.checkpoint is None:
         args.checkpoint = os.path.join(get_ckpt_root(args.dataset), args.model, "best_model.pth")
     if args.output_dir is None:

@@ -148,7 +148,7 @@ def main():
 
     # ---------- Step 0: 随机种子 + 输出目录 ----------
     set_seed(args.seed)
-    model_tag = args.model.replace("-", "_")
+    model_tag = args.model.replace("_", "")
     if args.checkpoint is None:
         args.checkpoint = os.path.join(get_ckpt_root(args.dataset), args.model, "best_model.pth")
     if args.output_dir is None:

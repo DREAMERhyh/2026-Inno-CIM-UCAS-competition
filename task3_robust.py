@@ -775,10 +775,15 @@ def run_experiment(exp_id: str, args) -> dict:
           f"layerwise={cfg['layerwise_alpha']}, asymmetric={cfg['asymmetric_sampling']})")
     print("#" * 80)
 
-    # 目录：自动包含模型名（simple_cnn → simplecnn，与目录重命名对齐）
-    model_tag = args.model.replace("_", "")
-    save_dir_checkpoint = os.path.join(get_ckpt_root(args.dataset), f"{exp_name}_{model_tag}")
-    output_dir = os.path.join(args.output_dir, f"{exp_name}_{model_tag}")
+    # 目录：与 CIFAR-10 既有产物布局对齐——robust_cnn 是 SimpleCNN 的鲁棒增强版，
+    # 权重目录沿用 Exp*_{dir_tag}（dir_tag=simplecnn），输出子目录仅用 exp_name，
+    # NAT 基线查 task2_simplecnn（与 cifar10 协议逐项一致）
+    if args.model == "simple_cnn":
+        print("[Task3] WARNING: --model simple_cnn 会忽略 use_calibration 开关（方案A 缺失），"
+              "任务3 消融协议应使用 --model robust_cnn。")
+    dir_tag = "simplecnn" if args.model == "robust_cnn" else args.model.replace("_", "")
+    save_dir_checkpoint = os.path.join(get_ckpt_root(args.dataset), f"{exp_name}_{dir_tag}")
+    output_dir = os.path.join(args.output_dir, exp_name)
     checkpoint_dir = save_dir_checkpoint
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs(checkpoint_dir, exist_ok=True)
@@ -786,9 +791,9 @@ def run_experiment(exp_id: str, args) -> dict:
     print(f"[路径] 输出目录: {output_dir}")
     print(f"[路径] 权重目录: {checkpoint_dir}")
 
-    # 计算 NAT-Scratch 基线 CSV 路径
+    # 计算 NAT-Scratch 基线 CSV 路径（robust_cnn → task2_simplecnn，与 cifar10 协议一致）
     nat_baseline_csv = os.path.join(
-        get_outputs_root(args.dataset), f"task2_{model_tag}", "scratch", "alpha_sensitivity.csv"
+        get_outputs_root(args.dataset), f"task2_{dir_tag}", "scratch", "alpha_sensitivity.csv"
     )
     if args.dataset == "cifar100" and not os.path.exists(nat_baseline_csv):
         raise FileNotFoundError(
@@ -973,7 +978,7 @@ def main():
     if args.device is None:
         args.device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    model_tag = args.model.replace("_", "")
+    model_tag = "simplecnn" if args.model == "robust_cnn" else args.model.replace("_", "")
     if args.output_dir is None:
         args.output_dir = os.path.join(get_outputs_root(args.dataset), f"task3_{model_tag}")
     os.makedirs(args.output_dir, exist_ok=True)
