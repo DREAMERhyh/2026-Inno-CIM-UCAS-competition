@@ -225,12 +225,73 @@ def harvest_dataset(rows, root, dataset):
             })
 
 
+def harvest_v3(rows):
+    """第三阶段新增产物：v3_methods（训练类）与 v3_readout_repair（读出适配类）"""
+    # --- v3_methods：每个 mode_profile 一个 run ---
+    import glob
+    for d in sorted(glob.glob("outputs_cifar100/v3_methods/*")):
+        if not os.path.isdir(d):
+            continue
+        name = os.path.basename(d)
+        mp = os.path.join(d, "metrics.json")
+        scan = os.path.join(d, "alpha_sensitivity.csv")
+        if not os.path.exists(scan):
+            continue
+        mj = read_json(mp)
+        amap = alpha_map(read_csv_rows(scan))
+        if not amap:
+            continue
+        m = metrics_from_scan(amap)
+        best = mj.get("best_test_acc")
+        pc = "n/a"
+        if best is not None and m["clean"] != "":
+            dd = round(abs(m["clean"] - float(best)), 4)
+            pc = f"{dd:.4f} {'PASS' if dd <= 0.01 else 'FAIL'}"
+        rows.append({
+            "run_id": f"cifar100|simple_cnn|v3_{name}|7pt(or wide)",
+            "date": mtime(mp), "dataset": "cifar100", "model": "simple_cnn",
+            "weight_type": f"v3_{mj.get('mode','?')}_{mj.get('profile','?')}",
+            "seed": mj.get("seed", 42), "epochs": mj.get("total_epochs", ""),
+            "alpha_protocol": "v3", "clean": m["clean"], "drop_at_0.3": m["drop_at_0.3"],
+            "mid_band_mean": m["mid_band_mean"], "neg_0.3": m["neg_0.3"],
+            "pos_0.3": m["pos_0.3"], "params": PARAMS.get("simple_cnn", ""),
+            "pairing_check": pc, "artifact_path": d.replace("\\", "/"),
+            "verdict": mj.get("mode", "") + "/" + str(mj.get("profile", "")),
+        })
+    # --- v3_readout_repair：每个 (模型, 配置) 取 e_readout_NAT 与 a_original_fc 两行 ---
+    for f in sorted(glob.glob("outputs_cifar100/v3_readout_repair/*.csv")):
+        base = os.path.basename(f).replace(".csv", "")
+        rr = read_csv_rows(f)
+        if not rr:
+            continue
+        cols = [c for c in rr[0].keys() if c != "readout"]
+        for target in ("a_original_fc", "e_readout_NAT"):
+            row = next((r for r in rr if r["readout"] == target), None)
+            if row is None:
+                continue
+            amap = {float(c): float(row[c]) for c in cols}
+            m = metrics_from_scan(amap)
+            rows.append({
+                "run_id": f"cifar100|{base}|{target}|7pt",
+                "date": mtime(f), "dataset": "cifar100", "model": base.split("_alpha")[0].replace("readout_repair_", ""),
+                "weight_type": target, "seed": 42, "epochs": "",
+                "alpha_protocol": "7pt(读出适配)", "clean": m["clean"],
+                "drop_at_0.3": m["drop_at_0.3"], "mid_band_mean": m["mid_band_mean"],
+                "neg_0.3": m["neg_0.3"], "pos_0.3": m["pos_0.3"],
+                "params": "", "pairing_check": "n/a(读出适配)",
+                "artifact_path": f.replace("\\", "/"),
+                "verdict": "readout-NAT 实验",
+            })
+
+
 def main():
     rows = []
     if os.path.isdir("outputs"):
         harvest_dataset(rows, "outputs", "cifar10")
     if os.path.isdir("outputs_cifar100"):
         harvest_dataset(rows, "outputs_cifar100", "cifar100")
+    if os.path.isdir("outputs_cifar100/v3_methods") or os.path.isdir("outputs_cifar100/v3_readout_repair"):
+        harvest_v3(rows)
     with open(OUT_CSV, "w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=FIELDS)
         w.writeheader()
