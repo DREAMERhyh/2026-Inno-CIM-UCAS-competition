@@ -23,6 +23,8 @@ import argparse
 import csv
 import os
 
+import random
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -32,8 +34,36 @@ from torchvision import datasets, transforms
 from utils.nonlinearity import register_nonlinearity_hooks, remove_hooks
 from utils.paths import get_ckpt_root, get_num_classes, get_outputs_root
 
+READOUT = None  # 全局读出层句柄（main 中赋值）
+
 MEAN = (0.5071, 0.4865, 0.4409)
 STD = (0.2673, 0.2564, 0.2762)
+
+
+def build_backbone(name, nc):
+    """主干工厂（冻结用）：simple_cnn / vgg11 / resnet18"""
+    if name == "simple_cnn":
+        from models.simple_cnn import SimpleCNN
+        return SimpleCNN(num_classes=nc)
+    if name == "vgg11":
+        from models.vgg11 import VGG11
+        return VGG11(num_classes=nc)
+    if name == "resnet18":
+        from models.resnet import ResNet18
+        return ResNet18(num_classes=nc)
+    raise ValueError(f"未支持的主干: {name}")
+
+
+def get_readout_module(model):
+    """返回"读出层"（最后一个 Linear）：simple_cnn/resnet18 是 model.fc；
+    vgg11 是 classifier 里的最后一个 Linear。"""
+    if hasattr(model, "fc") and isinstance(model.fc, nn.Linear):
+        return model.fc
+    if hasattr(model, "classifier"):
+        last = list(model.classifier.children())[-1]
+        if isinstance(last, nn.Linear):
+            return last
+    raise ValueError("未找到读出层（最后的 Linear）")
 
 
 def build_loaders(batch_size=512):
@@ -48,7 +78,7 @@ def build_loaders(batch_size=512):
 def extract_features(model, loader, alpha, device, limit=None):
     """返回 (feats, labels)；feats = fc 的输入（GAP 后）"""
     store = {}
-    h = model.fc.register_forward_pre_hook(lambda m, inp: store.__setitem__("f", inp[0]))
+    h = READOUT.register_forward_pre_hook(lambda m, inp: store.__setitem__("f", inp[0]))
     hooks = register_nonlinearity_hooks(model, alpha) if alpha != 0.0 else []
     F, Y = [], []
     n = 0
@@ -76,7 +106,7 @@ def eval_with_readout(model, loader, device, alpha, readout):
         for x, y in loader:
             x, y = x.to(device), y.to(device)
             store = {}
-            h = model.fc.register_forward_pre_hook(lambda m, inp: store.__setitem__("f", inp[0]))
+            h = READOUT.register_forward_pre_hook(lambda m, inp: store.__setitem__("f", inp[0]))
             model(x)
             h.remove()
             logits = readout(store["f"])
@@ -103,7 +133,7 @@ def train_linear(X, Y, nc, device, epochs=200, lr=0.05, wd=1e-4):
     return lin
 
 
-def train_readout_nat(model, loader, nc, device, epochs=6, lr=0.01, wd=1e-4, alpha_max=0.3, seed=42):
+def train_readout_nat(model, loader, nc, device, epochs=6, lr=0.01, wd=1e-4, alpha_max=0.3, seed=42, limit=None):
     """Readout-NAT：冻结主干，在每个 batch 上以**新的随机 α** 提取特征并更新读出。
 
     与 full-NAT 的区别：只训练最后的线性读出（主干冻结），成本 ≈ full-NAT 的 1/120。
@@ -111,7 +141,7 @@ def train_readout_nat(model, loader, nc, device, epochs=6, lr=0.01, wd=1e-4, alp
     """
     import random as _r
     rng = _r.Random(seed)
-    lin = nn.Linear(model.fc.in_features, nc).to(device)
+    lin = nn.Linear(READOUT.in_features, nc).to(device)
     opt = torch.optim.Adam(lin.parameters(), lr=lr, weight_decay=wd)
     crit = nn.CrossEntropyLoss()
     model.eval()
@@ -122,7 +152,7 @@ def train_readout_nat(model, loader, nc, device, epochs=6, lr=0.01, wd=1e-4, alp
             alpha = rng.uniform(-alpha_max, alpha_max)
             with torch.no_grad():
                 store = {}
-                h = model.fc.register_forward_pre_hook(lambda m, inp: store.__setitem__("f", inp[0]))
+                h = READOUT.register_forward_pre_hook(lambda m, inp: store.__setitem__("f", inp[0]))
                 hooks = register_nonlinearity_hooks(model, alpha) if alpha != 0.0 else []
                 try:
                     model(x)
@@ -138,6 +168,8 @@ def train_readout_nat(model, loader, nc, device, epochs=6, lr=0.01, wd=1e-4, alp
             opt.step()
             tot += y.size(0)
             cor += (logits.argmax(1) == y).sum().item()
+            if limit and tot >= limit:
+                break
         print(f"  [readout-NAT] ep{ep+1}/{epochs} (α~U[±{alpha_max}]) 训练精度 {100*cor/tot:.2f}%")
     lin.eval()
     return lin
@@ -164,25 +196,31 @@ def main():
     ap.add_argument("--dataset", default="cifar100")
     ap.add_argument("--alpha", type=float, default=0.3, help="读出适配所用的失真强度")
     ap.add_argument("--epochs_nat", type=int, default=6, help="readout-NAT 的轮数")
+    ap.add_argument("--n_train", type=int, default=0, help="限制读出训练样本数（0=全量 50k）")
     ap.add_argument("--device", default=None)
     args = ap.parse_args()
     device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
+    # 全流程固定种子（读出训练用 Adam，需显式播种以保证可复现）
+    random.seed(42); np.random.seed(42); torch.manual_seed(42); torch.cuda.manual_seed_all(42)
     nc = get_num_classes(args.dataset)
+    args.n_train = args.n_train or None  # 0 → None = 全量 50k
 
-    from models.simple_cnn import SimpleCNN
-    model = SimpleCNN(num_classes=nc)
+    model = build_backbone(args.model, nc)
     ck = torch.load(os.path.join(get_ckpt_root(args.dataset), args.model, "best_model.pth"),
                     map_location=device)
     model.load_state_dict(ck["model_state_dict"] if "model_state_dict" in ck else ck)
     model.to(device).eval()
     for p in model.parameters():
         p.requires_grad_(False)
+    global READOUT
+    READOUT = get_readout_module(model)
+    print(f"[readout-repair] 读出层: {type(READOUT).__name__} (in_features={READOUT.in_features})")
     print(f"[readout-repair] 冻结主干 {args.model}（clean 权重），适配失真 α={args.alpha:+.2f}")
 
     train_loader, test_loader = build_loaders()
     print("[readout-repair] 提取特征（干净 + 失真）...")
-    Xc_tr, Y_tr = extract_features(model, train_loader, 0.0, device)
-    Xd_tr, _ = extract_features(model, train_loader, args.alpha, device)
+    Xc_tr, Y_tr = extract_features(model, train_loader, 0.0, device, limit=args.n_train)
+    Xd_tr, _ = extract_features(model, train_loader, args.alpha, device, limit=args.n_train)
     print(f"  训练特征: clean {Xc_tr.shape} / dist {Xd_tr.shape}")
 
     print("[readout-repair] 训练三种固定条件读出 ...")
@@ -191,10 +229,12 @@ def main():
     mlp_dist = train_mlp(Xd_tr, Y_tr, nc, device)
 
     print("[readout-repair] 训练 readout-NAT（α~U[±0.3] 分布上的读出）...")
-    lin_nat = train_readout_nat(model, train_loader, nc, device, epochs=args.epochs_nat)
+    lin_nat = train_readout_nat(model, train_loader, nc, device, epochs=args.epochs_nat,
+                               limit=args.n_train)
 
     readouts = {
-        "a_original_fc": lambda f: model.fc(f),
+        # 注意：不能用 model.fc(f)（会二次触发 fc 上的失真 pre-hook），改用函数式线性
+        "a_original_fc": lambda f: torch.nn.functional.linear(f, READOUT.weight, READOUT.bias),
         "b_clean_fit_linear": lambda f: lin_clean(f),
         "c_dist_fit_linear": lambda f: lin_dist(f),
         "d_dist_fit_mlp": lambda f: mlp_dist(f),
@@ -212,7 +252,8 @@ def main():
 
     out_dir = os.path.join(get_outputs_root(args.dataset), "v3_readout_repair")
     os.makedirs(out_dir, exist_ok=True)
-    p = os.path.join(out_dir, f"readout_repair_alpha{args.alpha:+.2f}.csv")
+    tag = f"n{args.n_train}" if args.n_train else "n50k"
+    p = os.path.join(out_dir, f"readout_repair_{args.model}_alpha{args.alpha:+.2f}_{tag}.csv")
     with open(p, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=["readout"] + [str(a) for a in alphas])
         w.writeheader()
