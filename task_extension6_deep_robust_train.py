@@ -523,6 +523,14 @@ def parse_args():
         help="训练模型：vgg11 或 resnet18",
     )
     parser.add_argument("--epochs", type=int, default=120, help="训练 epoch 数，默认 120（与 Exp2 一致）")
+    parser.add_argument(
+        "--variant", type=str, default="exp2", choices=["exp2", "exp3"],
+        help="配方变体：exp2=校准+分层α（原协议）；exp3=校准+分层α+非对称采样(70/30)",
+    )
+    parser.add_argument(
+        "--tag", type=str, default="",
+        help="名称后缀（如 _200ep / _seed43），用于避免覆盖既有产物",
+    )
     parser.add_argument("--batch_size", type=int, default=128, help="batch size，默认 128")
     parser.add_argument("--lr", type=float, default=0.01, help="初始学习率，默认 0.01（与 Exp2 一致）")
     parser.add_argument("--weight_decay", type=float, default=1e-4, help="weight decay，默认 1e-4")
@@ -544,9 +552,20 @@ def main():
 
     model_name = args.model
     model_tag = model_name.replace("_", "")
-    exp_name = "Exp2_Calib+Layerwise"
-    save_dir_checkpoint = os.path.join(get_ckpt_root(args.dataset), f"{exp_name}_{model_tag}")
-    output_dir = os.path.join(get_outputs_root(args.dataset), f"extension6_deep_robust/{model_tag}")
+    # 配方变体：exp2 = 校准+分层α（原协议）；exp3 = 校准+分层α+非对称采样(70/30)
+    if args.variant == "exp3":
+        exp_name = "Exp3_FullRobust"
+        use_asymmetric = True
+    else:
+        exp_name = "Exp2_Calib+Layerwise"
+        use_asymmetric = False
+    tag = args.tag or ""
+    # exp2 保持原有输出目录（向后兼容既有产物）；exp3 自动带 _exp3 后缀，避免覆盖 Exp2 产物
+    variant_suffix = "" if args.variant == "exp2" else "_exp3"
+    save_dir_checkpoint = os.path.join(get_ckpt_root(args.dataset), f"{exp_name}_{model_tag}{tag}")
+    output_dir = os.path.join(
+        get_outputs_root(args.dataset), f"extension6_deep_robust/{model_tag}{variant_suffix}{tag}"
+    )
     os.makedirs(save_dir_checkpoint, exist_ok=True)
     os.makedirs(output_dir, exist_ok=True)
 
@@ -606,7 +625,7 @@ def main():
         patience=args.patience,
         use_calibration=True,
         layerwise_alpha=True,
-        asymmetric_sampling=False,
+        asymmetric_sampling=use_asymmetric,
         exp_name=exp_name,
         dataset=args.dataset,
     )
