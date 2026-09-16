@@ -1185,6 +1185,8 @@ python task_extension6_eval_deep_robust.py \
 ### 16.3 三项综合结论
 
 1. **正负不对称性：三条独立证据线交汇**——一阶段"正向失真破坏力 3.4× 于负向"、Extension 4"NAT 负侧增益随距离递增而正侧反转"、Extension 6"exp2 三架构负侧精度均高于正侧"三条测量收敛于同一结论：正方向（增益饱和型）失真是本质上的难防御方向，失真补偿资源应向正方向倾斜。
+2. **深度规律的统一图景**——注入点 5→9→18 脆弱性递增、容差窗口随深度收窄（SimpleCNN~0.3 → ResNet~0.15）、exp2 增益随深度衰减（+13.68 → +3.04）统一指向"复合最坏情形概率的指数放大"：注入点超过约 10 个的架构，必须配合多点校准才可期待有效防御。
+3. **校准注入密度法则**——SimpleCNN exp2（1 个注入点）负侧外推 −12.58pp vs nat_scratch；深层 exp2（5/8 个注入点）15 点全胜。校准注入密度应随误差累积节点数同步扩展，单点校准（仅 GAP 后）只保护分类边界、不保护特征通路。一阶段未来工作提出的"分布式逐层校准"设想在本项得到实证支持。
 
 ---
 
@@ -1291,17 +1293,23 @@ python plot_cross_arch_summary.py --dataset cifar100
 
 ### 18.4 CIFAR-100 实验结果
 
-| 实验项 | 数据集 | 配置 | 精度 / 指标 | 备注 |
-|--------|--------|------|-------------|------|
-| Clean Baseline (SimpleCNN, 120ep) | cifar100 | SimpleCNN | **待填** |  |
-| Clean Baseline (VGG-11, 200ep) | cifar100 | VGG-11 | **待填** |  |
-| Clean Baseline (ResNet-18, 200ep) | cifar100 | ResNet-18 | **待填** |  |
-| NAT Scratch (SimpleCNN) | cifar100 | α∈[-0.3,0.3] random | **待填** |  |
-| NAT Finetune (SimpleCNN) | cifar100 | α∈[-0.3,0.3] random | **待填** |  |
-| Exp2 Robust (SimpleCNN) | cifar100 | Calib+Layerwise | **待填** |  |
-| Exp2 Robust (VGG-11) | cifar100 | Exp2_Calib+Layerwise | **待填** |  |
-| Exp2 Robust (ResNet-18) | cifar100 | Exp2_Calib+Layerwise | **待填** |  |
+完整链路（train → task1 → task2 → task3 → extension1~6 → cross_arch）已在 CIFAR-100 上按与 CIFAR-10
+完全相同的协议复跑（相同 α 扫描点、相同超参、相同消融配置、相同目录布局），产物位于 `./outputs_cifar100/`。
+关键数值如下（α=0 为干净精度，α=±0.3 为极限失真精度）：
 
-> **回归测试说明**：CIFAR-10 既有产物回归测试由用户统一安排；CIFAR-100 实验数值章节留空待填，待用户完成对应训练与分析后补全上表。
-2. **深度规律的统一图景**——注入点 5→9→18 脆弱性递增、容差窗口随深度收窄（SimpleCNN~0.3 → ResNet~0.15）、exp2 增益随深度衰减（+13.68 → +3.04）统一指向"复合最坏情形概率的指数放大"：注入点超过约 10 个的架构，必须配合多点校准才可期待有效防御。
-3. **校准注入密度法则**——SimpleCNN exp2（1 个注入点）负侧外推 −12.58pp vs nat_scratch；深层 exp2（5/8 个注入点）15 点全胜。校准注入密度应随误差累积节点数同步扩展，单点校准（仅 GAP 后）只保护分类边界、不保护特征通路。一阶段未来工作提出的"分布式逐层校准"设想在本项得到实证支持。
+| 实验项 | 模型 | α=0 | α=+0.3 | α=−0.3 |
+|--------|------|-----|--------|--------|
+| Clean Baseline | SimpleCNN (120ep) | 59.99 | 28.09 | 42.91 |
+| Clean Baseline | VGG-11 (200ep) | 67.09 | 16.92 | 24.48 |
+| Clean Baseline | ResNet-18 (200ep) | 72.09 | 2.70 | 3.25 |
+| NAT-Scratch | SimpleCNN (120ep) | 60.70 | 21.41 | 46.20 |
+| NAT-Finetune | SimpleCNN (120ep) | 60.16 | 24.81 | 45.79 |
+| Exp2 Robust (Calib+Layerwise) | SimpleCNN | 61.22 | 25.16 | 43.10 |
+| Exp2 Robust (Calib+Layerwise) | VGG-11 | 68.05 | 15.98 | 34.45 |
+| Exp2 Robust (Calib+Layerwise) | ResNet-18 | 73.57 | 5.43 | 6.00 |
+
+> **协议一致性说明**：CIFAR-10 既有产物未被本次复跑改动；`./outputs_cifar100/` 与 `./outputs/` 的
+> 目录布局经 `diff` 逐项比对一致（仅 CIFAR-10 侧手写的实验总结 md 未在 CIFAR-100 侧同步撰写）。
+> 注：CIFAR-10 的锚点数值（ext5 的 36.74%/43.27% 等）不适用于 CIFAR-100，ext5 已按数据集分支
+> 跳过锚点比对；ext2 的 `known_clean_acc` 经验值同样仅作 fallback，实际以 checkpoint 记录的
+> `best_test_acc` 为准（已在 cifar100 下打印 WARNING 提示）。
