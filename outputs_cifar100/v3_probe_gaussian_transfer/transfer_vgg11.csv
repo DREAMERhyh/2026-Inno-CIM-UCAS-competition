@@ -1,0 +1,14 @@
+pert,x,acc_clean,acc_calibrated,delta
+nonlinearity,-0.3,24.49,34.46,9.97
+nonlinearity,-0.2,43.28,51.42,8.14
+nonlinearity,-0.1,60.13,63.86,3.73
+nonlinearity,0.0,67.09,68.05,0.96
+nonlinearity,0.1,60.94,61.15,0.21
+nonlinearity,0.2,39.03,40.16,1.13
+nonlinearity,0.3,16.92,15.98,-0.94
+gaussian,0.05,65.36,66.34,0.98
+gaussian,0.1,59.52,60.7,1.18
+gaussian,0.15,48.01,49.95,1.94
+gaussian,0.2,33.22,36.88,3.66
+gaussian,0.25,20.01,25.35,5.34
+gaussian,0.3,12.56,17.08,4.52
