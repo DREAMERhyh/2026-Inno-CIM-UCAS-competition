@@ -1,0 +1,4 @@
+exp_name,use_calibration,layerwise_alpha,asymmetric_sampling,clean_acc,acc_at_alpha_0.3,acc_drop_at_0.3
+Exp1_CalibOnly,True,False,False,60.87,21.87,39.0
+Exp2_Calib+Layerwise,True,True,False,61.22,25.16,36.06
+Exp3_FullRobust,True,True,True,60.82,29.89,30.93

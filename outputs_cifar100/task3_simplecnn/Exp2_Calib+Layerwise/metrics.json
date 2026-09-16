@@ -1,0 +1,14 @@
+{
+    "dataset": "cifar100",
+    "best_test_acc": 61.22,
+    "best_epoch": 120,
+    "total_epochs": 120,
+    "final_train_loss": 0.8105231291208512,
+    "final_test_loss": 1.4934914329528808,
+    "final_train_acc": 76.03966346153847,
+    "final_test_acc": 61.22,
+    "use_calibration": true,
+    "layerwise_alpha": true,
+    "asymmetric_sampling": false,
+    "exp_name": "Exp2_Calib+Layerwise"
+}
