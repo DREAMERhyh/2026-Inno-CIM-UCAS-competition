@@ -1,0 +1,16 @@
+{
+    "dataset": "cifar100",
+    "best_test_acc": 68.05,
+    "best_epoch": 105,
+    "total_epochs": 120,
+    "final_train_loss": 0.0037652087544511933,
+    "final_test_loss": 1.7725487808227538,
+    "final_train_acc": 99.9639423076923,
+    "final_test_acc": 67.66,
+    "final_alpha03_acc": 15.91,
+    "use_calibration": true,
+    "layerwise_alpha": true,
+    "asymmetric_sampling": false,
+    "exp_name": "Exp2_Calib+Layerwise",
+    "model_name": "vgg11"
+}
