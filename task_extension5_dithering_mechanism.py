@@ -1281,12 +1281,15 @@ def main():
         dataset=args.dataset,
     )
 
-    # 锚点自检
-    for r in group_a_results:
-        if r["num_bits"] == 8:
-            print(f"  [自检] 8bit anchor: {r['accuracy']:.2f}% (expected ≈36.74%)")
-        if r["num_bits"] == 4:
-            print(f"  [自检] 4bit anchor: {r['accuracy']:.2f}% (expected ≈43.27%)")
+    # 锚点自检（36.74%/43.27% 为 CIFAR-10 锚点，仅 cifar10 时比对）
+    if args.dataset == "cifar10":
+        for r in group_a_results:
+            if r["num_bits"] == 8:
+                print(f"  [自检] 8bit anchor: {r['accuracy']:.2f}% (expected ≈36.74%)")
+            if r["num_bits"] == 4:
+                print(f"  [自检] 4bit anchor: {r['accuracy']:.2f}% (expected ≈43.27%)")
+    else:
+        print(f"  [自检] 当前数据集 {args.dataset}：CIFAR-10 锚点不适用，跳过自检")
 
     # ---- Step 4: 组(b) 可控噪声注入 ----
     print("\n" + "#" * 70)
