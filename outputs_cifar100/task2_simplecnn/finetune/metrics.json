@@ -1,0 +1,19 @@
+{
+    "dataset": "cifar100",
+    "best_test_acc": 60.16,
+    "best_epoch": 57,
+    "total_epochs": 120,
+    "final_train_loss": 0.9113840401172638,
+    "final_test_loss": 1.5088313467025758,
+    "final_train_acc": 74.2207532051282,
+    "final_test_acc": 59.89,
+    "alpha_mode": "random",
+    "alpha_range": [
+        -0.3,
+        0.3
+    ],
+    "alpha_fixed": 0.3,
+    "mode_nat_train_mode": null,
+    "nat_train_mode": "finetune",
+    "checkpoint_used": "./checkpoints_cifar100\\simple_cnn\\best_model.pth"
+}

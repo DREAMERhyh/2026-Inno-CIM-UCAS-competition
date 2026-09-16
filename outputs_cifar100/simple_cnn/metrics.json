@@ -1,0 +1,12 @@
+{
+    "best_test_acc": 59.99,
+    "final_train_loss": 0.938968,
+    "final_test_loss": 1.494095,
+    "final_train_acc": 73.6478,
+    "final_test_acc": 59.87,
+    "total_epochs": 120,
+    "start_epoch": 0,
+    "resumed": false,
+    "best_epoch": 114,
+    "dataset": "cifar100"
+}

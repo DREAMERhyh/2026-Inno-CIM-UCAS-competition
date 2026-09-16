@@ -1,0 +1,19 @@
+{
+    "dataset": "cifar100",
+    "best_test_acc": 71.84,
+    "best_epoch": 162,
+    "total_epochs": 200,
+    "final_train_loss": 0.003924981393188668,
+    "final_test_loss": 1.6073420944213868,
+    "final_train_acc": 99.96794871794872,
+    "final_test_acc": 69.1,
+    "alpha_mode": "random",
+    "alpha_range": [
+        -0.3,
+        0.3
+    ],
+    "alpha_fixed": 0.3,
+    "mode_nat_train_mode": null,
+    "nat_train_mode": "scratch",
+    "checkpoint_used": null
+}
