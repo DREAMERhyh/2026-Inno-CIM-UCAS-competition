@@ -1,0 +1,7 @@
+model_name,total_params,clean_accuracy,acc_at_alpha_0.3,acc_drop_at_0.3
+simple_cnn,254084,59.99,28.09,31.9
+resnet18,11220132,72.09,2.7,69.39
+vgg11,9277284,67.09,16.92,50.17
+NAT-simple_cnn,254084,60.16,24.81,35.35
+NAT-resnet18,11220132,72.11,3.51,68.6
+NAT-vgg11,9277284,67.12,19.8,47.32
