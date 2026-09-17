@@ -156,17 +156,19 @@ def main():
                 Xa, Ya = extract(model, ds, idx, dev, a, readout)
                 Za = (Xa - mu) / sd_
                 with torch.no_grad():
-                    lc = head_cln(torch.from_numpy(Xa).float()).argmax(1).numpy()
-                    lr_ = head_rob(torch.from_numpy(Xa).float()).argmax(1).numpy()
+                    lg_c = head_cln(torch.from_numpy(Xa).float()).numpy()
+                    lg_r = head_rob(torch.from_numpy(Xa).float()).numpy()
+                lc = lg_c.argmax(1)
+                lr_ = lg_r.argmax(1)
                 ah = ridge.predict(Za)
-                res[a] = (lc, lr_, ah, Ya)
+                res[a] = (lc, lr_, ah, Ya, lg_c, lg_r)
             return res
 
         val = eval_split(val_idx, ds_tr)
         best_tau, best_val = None, -1
         for tau in TAUS:
             tot = cor = 0
-            for a, (lc, lr_, ah, Ya) in val.items():
+            for a, (lc, lr_, ah, Ya, _gc, _gr) in val.items():
                 pred = np.where(np.abs(ah) > tau, lr_, lc)
                 cor += (pred == Ya).sum(); tot += len(Ya)
             acc = 100 * cor / tot
@@ -175,13 +177,18 @@ def main():
 
         test = eval_split(te_idx, ds_te)
         for a in EVAL:
-            lc, lr_, ah, Ya = test[a]
+            lc, lr_, ah, Ya, lg_c, lg_r = test[a]
             acc_c = 100 * (lc == Ya).mean()
             acc_r = 100 * (lr_ == Ya).mean()
             pred = np.where(np.abs(ah) > best_tau, lr_, lc)
             acc_rt = 100 * (pred == Ya).mean()
+            # 软门控：w = clip(|α̂|/0.3, 0, 1)，在两头 logits 上线性插值
+            w = np.clip(np.abs(ah) / 0.3, 0.0, 1.0)[:, None]
+            lg_soft = (1 - w) * lg_c + w * lg_r
+            acc_soft = 100 * (lg_soft.argmax(1) == Ya).mean()
             rows.append({"seed": seed, "alpha": a, "acc_clean_head": round(acc_c, 2),
                          "acc_robust_head": round(acc_r, 2), "acc_router": round(acc_rt, 2),
+                         "acc_softgate": round(acc_soft, 2),
                          "oracle": round(max(acc_c, acc_r), 2), "tau": best_tau,
                          "ahat_mean": round(float(ah.mean()), 4),
                          "ridge_R2": round(r2, 4), "ridge_MAE": round(mae, 4)})
@@ -194,15 +201,16 @@ def main():
         w.writeheader(); w.writerows(rows)
 
     print(f"\n=== 完整配方（{args.arch}，{len(seeds)} seeds）===")
-    print(f"{'seed':>5} {'clean':>7} {'+0.3':>7} {'+0.2':>7} {'mean7':>7} {'τ':>6} {'R²':>7} {'MAE':>7}")
+    print(f"{'seed':>5} {'clean':>7} {'+0.3':>7} {'+0.2':>7} {'mean7':>7} {'soft7':>7} {'τ':>6} {'R²':>7} {'MAE':>7}")
     summ = []
     for seed in seeds:
         rs = [r for r in rows if r["seed"] == seed]
         d = {r["alpha"]: r for r in rs}
         clean = d[0.0]["acc_router"]; p3 = d[0.3]["acc_router"]; p2 = d[0.2]["acc_router"]
         mean7 = float(np.mean([d[a]["acc_router"] for a in EVAL]))
-        summ.append((clean, p3, mean7))
-        print(f"{seed:>5} {clean:>7.2f} {p3:>7.2f} {p2:>7.2f} {mean7:>7.2f} "
+        soft7 = float(np.mean([d[a]["acc_softgate"] for a in EVAL]))
+        summ.append((clean, p3, mean7, soft7))
+        print(f"{seed:>5} {clean:>7.2f} {p3:>7.2f} {p2:>7.2f} {mean7:>7.2f} {soft7:>7.2f} "
               f"{d[0.0]['tau']:>6.3f} {d[0.0]['ridge_R2']:>7.4f} {d[0.0]['ridge_MAE']:>7.4f}")
     m = np.array(summ)
     print(f"{'均值':>5} {m[:,0].mean():>7.2f} {m[:,1].mean():>7.2f} "
