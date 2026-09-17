@@ -273,7 +273,8 @@ def train(args, model, train_loader, test_loader, device, names):
                 opt.step()
                 if amap is None:
                     alpha_now = -1.0  # 纯高斯训练无 α
-                alpha_now = float(np.mean([abs(v) for v in amap.values()]))
+                else:
+                    alpha_now = float(np.mean([abs(v) for v in amap.values()]))
 
             tl += loss.item() * x.size(0)
             tt += x.size(0)
