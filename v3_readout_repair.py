@@ -64,6 +64,10 @@ def build_backbone(name, nc):
     if name == "robust_cnn":
         from models.robust_cnn import RobustCNN
         return RobustCNN(num_classes=nc, use_calibration=True)
+    if name == "simple_cnn_mp":
+        # MaxPool 密集变体（定义在 v3_methods_simplecnn.py，P1-5 引入）
+        from v3_methods_simplecnn import SimpleCNNMaxPool
+        return SimpleCNNMaxPool(num_classes=nc)
     raise ValueError(f"未支持的主干: {name}")
 
 
@@ -211,7 +215,7 @@ def main():
     ap.add_argument("--model", default="simple_cnn",
                     help="clean 权重时的模型名（兼容旧接口，等价于 --arch）")
     ap.add_argument("--arch", default=None,
-                    choices=["simple_cnn", "vgg11", "resnet18",
+                    choices=["simple_cnn", "vgg11", "resnet18", "simple_cnn_mp",
                              "robust_vgg11", "robust_resnet18", "robust_cnn"],
                     help="主干架构类（默认 = --model）")
     ap.add_argument("--ckpt", default=None, help="主干权重路径（默认 = clean 权重）")
