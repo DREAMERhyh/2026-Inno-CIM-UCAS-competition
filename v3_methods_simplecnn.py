@@ -115,9 +115,53 @@ class SimpleCNNMaxPool(nn.Module):
         return self.fc(x)
 
 
+class Top2MeanPool2d(nn.Module):
+    """top-2 均值池化（2×2 窗口取最大两个元素的均值）——P0-3(c) 的算子替换对照。
+
+    与 MaxPool 的差别：仍做降维（2×2→1），但对 f_α 不再"可交换"（低通而非取极值）。
+    """
+
+    def __init__(self, k: int = 2, stride: int = 2):
+        super().__init__()
+        self.k = k
+        self.stride = stride
+        self.kernel = 2
+
+    def forward(self, x):
+        B, C, H, W = x.shape
+        # 用 unfold 切 2×2 窗口
+        cols = torch.nn.functional.unfold(x, kernel_size=self.kernel, stride=self.stride)  # (B, C*4, L)
+        cols = cols.view(B, C, self.kernel * self.kernel, -1)
+        topk = torch.topk(cols, k=self.k, dim=2).values
+        out = topk.mean(dim=2)                                # (B, C, L)
+        L = out.shape[-1]
+        Ho, Wo = (H - self.kernel) // self.stride + 1, (W - self.kernel) // self.stride + 1
+        return out.view(B, C, Ho, Wo)
+
+
+class SimpleCNNMaxPoolVariant(SimpleCNNMaxPool):
+    """把 SimpleCNNMaxPool 的所有下采样替换为 avg 或 top-2 均值（P0-3(c) 用），其余结构不变。"""
+
+    def __init__(self, num_classes: int = 100, pool_type: str = "avg"):
+        super().__init__(num_classes=num_classes)
+        def mk():
+            if pool_type == "avg":
+                return nn.AvgPool2d(2, 2)
+            if pool_type == "top2":
+                return Top2MeanPool2d(2, 2)
+            raise ValueError(pool_type)
+        for name in ("pool1", "pool2", "pool3", "pool4", "pool5"):
+            setattr(self, name, mk())
+        self.pool_type = pool_type
+
+
 def build_arch(name, nc):
     if name == "simple_cnn_mp":
         return SimpleCNNMaxPool(num_classes=nc)
+    if name == "simple_cnn_mp_avg":
+        return SimpleCNNMaxPoolVariant(num_classes=nc, pool_type="avg")
+    if name == "simple_cnn_mp_top2":
+        return SimpleCNNMaxPoolVariant(num_classes=nc, pool_type="top2")
     from models.simple_cnn import SimpleCNN
     return SimpleCNN(num_classes=nc)
 
@@ -353,7 +397,7 @@ def main():
                     choices=["budget", "adv", "curriculum", "joint", "range", "gauss",
                              "plain", "clean"])
     ap.add_argument("--arch", default="simple_cnn",
-                    choices=["simple_cnn", "simple_cnn_mp"],
+                    choices=["simple_cnn", "simple_cnn_mp", "simple_cnn_mp_avg", "simple_cnn_mp_top2"],
                     help="主干架构；simple_cnn_mp = MaxPool 密度 2→5（P1-5 用）")
     ap.add_argument("--profile", default="uniform", choices=["uniform", "front", "rear", "sens"])
     ap.add_argument("--dataset", default="cifar100")
