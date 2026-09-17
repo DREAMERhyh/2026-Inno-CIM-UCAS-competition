@@ -273,6 +273,9 @@ def parse_args():
         help="数据集，默认: cifar10",
     )
     parser.add_argument(
+        "--tag", type=str, default="", help="主干目录后缀（如 _200ep），用于评估带后缀的权重"
+    )
+    parser.add_argument(
         "--variant", type=str, default="exp2", choices=["exp2", "exp3"],
         help="配方变体：exp2=校准+分层α（原协议）；exp3=校准+分层α+非对称采样",
     )
@@ -321,7 +324,7 @@ def main():
     global WEIGHT_TYPE
     WEIGHT_TYPE = weight_type_name
     if args.output_dir is None:
-        sub = "extension6_deep_robust" if args.variant == "exp2" else "extension6_deep_robust/eval_exp3"
+        sub = ("extension6_deep_robust" if args.variant == "exp2" else "extension6_deep_robust/eval_exp3") + (f"_tag{args.tag}" if args.tag else "")
         args.output_dir = os.path.join(get_outputs_root(args.dataset), sub)
     if args.ext4_csv is None:
         args.ext4_csv = os.path.join(get_outputs_root(args.dataset), "extension4_alpha_wide", "alpha_wide_scan_summary.csv")
@@ -353,7 +356,7 @@ def main():
         model_tag = model_name.replace("_", "")
         ckpt_path = os.path.join(
             args.checkpoint_root,
-            f"{exp_name}_{model_tag}",
+            f"{exp_name}_{model_tag}{args.tag}",
             "best_model.pth",
         )
         print(f"\n[Scan] model={model_name}, weight={WEIGHT_TYPE}")
