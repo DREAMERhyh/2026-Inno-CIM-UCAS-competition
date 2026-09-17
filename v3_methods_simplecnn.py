@@ -252,24 +252,32 @@ def train(args, model, train_loader, test_loader, device, names):
                 elif args.mode == "range":
                     r = args.alpha_max
                     amap = {n: random.uniform(-r, r) for n in names}
+                elif args.mode == "gauss":
+                    amap = None  # 纯高斯训练（无 α 注入），用于 2×2 设计的 σ-only 格
                 else:  # joint / plain
                     amap = {n: random.uniform(-0.3, 0.3) for n in names}
                 extra_hooks = []
-                if args.mode == "joint":
+                if args.mode in ("joint", "gauss"):
                     sigma = random.uniform(0.0, 0.3)
                     extra_hooks = register_perturbation_hooks(model, "gaussian", noise_std=sigma)
                 opt.zero_grad()
-                with Injector(model, amap):
+                if amap is None:
                     loss = crit(model(x), y)
                     loss.backward()
+                else:
+                    with Injector(model, amap):
+                        loss = crit(model(x), y)
+                        loss.backward()
                 for h in extra_hooks:
                     h.remove()
                 opt.step()
+                if amap is None:
+                    alpha_now = -1.0  # 纯高斯训练无 α
                 alpha_now = float(np.mean([abs(v) for v in amap.values()]))
 
             tl += loss.item() * x.size(0)
             tt += x.size(0)
-            pbar.set_postfix({"loss": f"{tl/tt:.3f}", "|a|": f"{alpha_now:.3f}"})
+            pbar.set_postfix({"loss": f"{tl/tt:.3f}", "|a|": (f"{alpha_now:.3f}" if alpha_now >= 0 else "n/a")})
         sched.step()
         acc = evaluate(model, test_loader, device)
         hooks = register_nonlinearity_hooks(model, 0.3)
@@ -291,7 +299,8 @@ def train(args, model, train_loader, test_loader, device, names):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mode", required=True, choices=["budget", "adv", "curriculum", "joint", "range"])
+    ap.add_argument("--mode", required=True,
+                    choices=["budget", "adv", "curriculum", "joint", "range", "gauss"])
     ap.add_argument("--profile", default="uniform", choices=["uniform", "front", "rear", "sens"])
     ap.add_argument("--dataset", default="cifar100")
     ap.add_argument("--epochs", type=int, default=120)
