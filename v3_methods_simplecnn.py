@@ -75,6 +75,53 @@ def build_loaders(batch_size, num_workers=2):
             DataLoader(te, batch_size=256, shuffle=False, num_workers=num_workers))
 
 
+class SimpleCNNMaxPool(nn.Module):
+    """SimpleCNN + 额外 MaxPool，使 MaxPool 次数从 2 提升到 5（对齐 VGG-11）。
+
+    用途（P1-5）：检验"MaxPool 密度"是否是 L3 架构依赖（VGG-11 独有高斯迁移）的成因。
+    其余结构与 SimpleCNN 逐层一致（conv 通道/BN/ReLU/GAP/FC），仅插入额外下采样。
+    32×32 → pool → 16 → pool → 8 → pool → 4 → pool → 2 → pool → 1
+    """
+
+    def __init__(self, num_classes: int = 100):
+        super().__init__()
+        self.conv1 = nn.Conv2d(3, 32, 3, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(32)
+        self.relu1 = nn.ReLU(inplace=True)
+        self.pool1 = nn.MaxPool2d(2, 2)          # 新增
+        self.conv2 = nn.Conv2d(32, 64, 3, padding=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(64)
+        self.relu2 = nn.ReLU(inplace=True)
+        self.pool2 = nn.MaxPool2d(2, 2)          # 原有
+        self.conv3 = nn.Conv2d(64, 128, 3, padding=1, bias=False)
+        self.bn3 = nn.BatchNorm2d(128)
+        self.relu3 = nn.ReLU(inplace=True)
+        self.pool3 = nn.MaxPool2d(2, 2)          # 新增
+        self.conv4 = nn.Conv2d(128, 128, 3, padding=1, bias=False)
+        self.bn4 = nn.BatchNorm2d(128)
+        self.relu4 = nn.ReLU(inplace=True)
+        self.pool4 = nn.MaxPool2d(2, 2)          # 原有
+        self.pool5 = nn.MaxPool2d(2, 2)          # 新增（密度对齐 VGG 的 5 次）
+        self.global_avg_pool = nn.AdaptiveAvgPool2d((1, 1))
+        self.fc = nn.Linear(128, num_classes)
+
+    def forward(self, x):
+        x = self.pool1(self.relu1(self.bn1(self.conv1(x))))
+        x = self.pool2(self.relu2(self.bn2(self.conv2(x))))
+        x = self.pool3(self.relu3(self.bn3(self.conv3(x))))
+        x = self.pool5(self.pool4(self.relu4(self.bn4(self.conv4(x)))))
+        x = self.global_avg_pool(x)
+        x = torch.flatten(x, 1)
+        return self.fc(x)
+
+
+def build_arch(name, nc):
+    if name == "simple_cnn_mp":
+        return SimpleCNNMaxPool(num_classes=nc)
+    from models.simple_cnn import SimpleCNN
+    return SimpleCNN(num_classes=nc)
+
+
 def layer_names(model):
     return [n for n, m in model.named_modules()
             if isinstance(m, (nn.Conv2d, nn.Linear)) and n != ""]
@@ -252,6 +299,8 @@ def train(args, model, train_loader, test_loader, device, names):
                 elif args.mode == "range":
                     r = args.alpha_max
                     amap = {n: random.uniform(-r, r) for n in names}
+                elif args.mode == "clean":
+                    amap = None  # 完全无注入（干净训练基线；P1-5 的对照组）
                 elif args.mode == "gauss":
                     amap = None  # 纯高斯训练（无 α 注入），用于 2×2 设计的 σ-only 格
                 else:  # joint / plain
@@ -301,7 +350,11 @@ def train(args, model, train_loader, test_loader, device, names):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--mode", required=True,
-                    choices=["budget", "adv", "curriculum", "joint", "range", "gauss"])
+                    choices=["budget", "adv", "curriculum", "joint", "range", "gauss",
+                             "plain", "clean"])
+    ap.add_argument("--arch", default="simple_cnn",
+                    choices=["simple_cnn", "simple_cnn_mp"],
+                    help="主干架构；simple_cnn_mp = MaxPool 密度 2→5（P1-5 用）")
     ap.add_argument("--profile", default="uniform", choices=["uniform", "front", "rear", "sens"])
     ap.add_argument("--dataset", default="cifar100")
     ap.add_argument("--epochs", type=int, default=120)
@@ -323,11 +376,12 @@ def main():
     device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
 
     nc = get_num_classes(args.dataset)
-    from models.simple_cnn import SimpleCNN
-    model = SimpleCNN(num_classes=nc).to(device)
+    model = build_arch(args.arch, nc).to(device)
     names = layer_names(model)
 
     name = f"{args.mode}_{args.profile}{args.tag}"
+    if args.arch != "simple_cnn":
+        name = f"{args.arch}_{name}"
     if args.mode == "range":
         name = f"range_{args.alpha_max:.2f}{args.tag}"
     args.ckpt_dir = os.path.join(get_ckpt_root(args.dataset), f"v3_{name}")
