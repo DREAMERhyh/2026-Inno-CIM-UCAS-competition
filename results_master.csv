@@ -47,8 +47,8 @@ cifar100|vgg11|nat_finetune|15pt,2026-09-16,cifar100,vgg11,nat_finetune,42,,15pt
 cifar100|vgg11|nat_scratch|15pt,2026-09-16,cifar100,vgg11,nat_scratch,42,,15pt,67.25,45.36,55.0375,34.07,21.89,9277284,n/a(扫描复用权重),outputs_cifar100/extension4_alpha_wide/alpha_wide_scan_summary.csv [rows=15],ext4 宽范围外推扫描
 cifar100|resnet18|exp2_robust|15pt,2026-09-16,cifar100,resnet18,exp2_robust,42,120,15pt,73.57,68.14,40.3875,6.0,5.43,11220132,0.0000 PASS,outputs_cifar100/extension6_deep_robust/resnet18/,ext6 Exp2 深层迁移
 cifar100|vgg11|exp2_robust|15pt,2026-09-16,cifar100,vgg11,exp2_robust,42,120,15pt,68.05,52.07,54.155,34.45,15.98,9277284,0.0000 PASS,outputs_cifar100/extension6_deep_robust/vgg11/,ext6 Exp2 深层迁移
-cifar100|resnet18|exp3_robust|15pt,2026-09-17,cifar100,resnet18,task3_Exp3_FullRobust,42,200,15pt(待扫),,,,,,11220132,待 eval 扫描,outputs_cifar100/extension6_deep_robust/resnet18_exp3/,v3 新增：深层 Exp3（非对称采样）
-cifar100|vgg11|exp3_robust|15pt,2026-09-17,cifar100,vgg11,task3_Exp3_FullRobust,42,200,15pt(待扫),,,,,,9277284,待 eval 扫描,outputs_cifar100/extension6_deep_robust/vgg11_exp3/,v3 新增：深层 Exp3（非对称采样）
+cifar100|resnet18|exp3_robust|15pt,2026-09-17,cifar100,resnet18,task3_Exp3_FullRobust,42,200,15pt,72.7,66.48,37.045,2.76,6.22,11220132,0.0000 PASS,outputs_cifar100/extension6_deep_robust/resnet18_exp3/,v3 新增：深层 Exp3（非对称采样）
+cifar100|vgg11|exp3_robust|15pt,2026-09-17,cifar100,vgg11,task3_Exp3_FullRobust,42,200,15pt,68.06,43.37,55.61,27.07,24.69,9277284,0.0000 PASS,outputs_cifar100/extension6_deep_robust/vgg11_exp3/,v3 新增：深层 Exp3（非对称采样）
 cifar100|simple_cnn|v3_adv_uniform|7pt(or wide),2026-09-17,cifar100,simple_cnn,v3_adv_uniform,42,120,v3,60.27,35.95,53.8375,45.06,24.32,254084,0.0000 PASS,outputs_cifar100/v3_methods/adv_uniform,adv/uniform
 cifar100|simple_cnn|v3_budget_front|7pt(or wide),2026-09-17,cifar100,simple_cnn,v3_budget_front,42,120,v3,60.72,41.16,52.3025,46.76,19.56,254084,0.0000 PASS,outputs_cifar100/v3_methods/budget_front,budget/front
 cifar100|simple_cnn|v3_budget_rear|7pt(or wide),2026-09-17,cifar100,simple_cnn,v3_budget_rear,42,120,v3,60.9,35.44,54.0325,47.42,25.46,254084,0.0000 PASS,outputs_cifar100/v3_methods/budget_rear,budget/rear

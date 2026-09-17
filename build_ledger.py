@@ -193,14 +193,17 @@ def harvest_dataset(rows, root, dataset):
                 "artifact_path": f"{ext6_root}/{model}/",
                 "verdict": "ext6 Exp2 深层迁移",
             })
-    # ---- ext6 Exp3 变体（本阶段新增，目录带 _exp3）----
+    # ---- ext6 Exp3 变体（第三阶段新增；扫描结果在 eval_exp3/ 下）----
+    exp3_scan = f"{ext6_root}/eval_exp3/alpha_wide_scan_deep_robust_exp3.csv"
+    exp3_rows = read_csv_rows(exp3_scan) if os.path.exists(exp3_scan) else []
     for model in ("resnet18", "vgg11"):
         d = f"{ext6_root}/{model}_exp3"
-        scan = f"{d}/alpha_wide_scan_exp3.csv"   # 由 eval 脚本产出（若已跑）
+        scan = f"{d}/alpha_wide_scan_exp3.csv"   # 兼容旧路径
         mp = f"{d}/metrics.json"
         if os.path.exists(mp):
             mj = read_json(mp)
-            amap = alpha_map(read_csv_rows(scan)) if os.path.exists(scan) else {}
+            sub = [r for r in exp3_rows if r.get("model") == model]
+            amap = alpha_map(sub) if sub else (alpha_map(read_csv_rows(scan)) if os.path.exists(scan) else {})
             if amap:
                 m = metrics_from_scan(amap)
                 clean, drop, mid = m["clean"], m["drop_at_0.3"], m["mid_band_mean"]
@@ -216,7 +219,7 @@ def harvest_dataset(rows, root, dataset):
                 "run_id": f"{dataset}|{model}|exp3_robust|15pt",
                 "date": mtime(mp), "dataset": dataset, "model": model,
                 "weight_type": "task3_Exp3_FullRobust", "seed": 42,
-                "epochs": mj.get("total_epochs", ""), "alpha_protocol": "15pt(待扫)",
+                "epochs": mj.get("total_epochs", ""), "alpha_protocol": "15pt",
                 "clean": clean, "drop_at_0.3": drop, "mid_band_mean": mid,
                 "neg_0.3": n3, "pos_0.3": p3, "params": PARAMS.get(model, ""),
                 "pairing_check": pc,
