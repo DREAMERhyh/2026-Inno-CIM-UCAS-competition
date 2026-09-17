@@ -1,0 +1,16 @@
+model,weight_type,alpha,accuracy,loss,is_extrapolation
+resnet18,exp3_robust,-0.6,1.0,113.737245,True
+resnet18,exp3_robust,-0.5,0.98,63.353873,True
+resnet18,exp3_robust,-0.4,1.07,36.828281,True
+resnet18,exp3_robust,-0.35,1.64,29.059126,True
+resnet18,exp3_robust,-0.3,2.76,23.100891,False
+resnet18,exp3_robust,-0.2,10.06,12.298981,False
+resnet18,exp3_robust,-0.1,46.55,3.902394,False
+resnet18,exp3_robust,0.0,72.7,1.541995,False
+resnet18,exp3_robust,0.1,66.01,1.894018,False
+resnet18,exp3_robust,0.2,25.56,5.57898,False
+resnet18,exp3_robust,0.3,6.22,9.528548,False
+resnet18,exp3_robust,0.35,4.08,9.852837,True
+resnet18,exp3_robust,0.4,3.02,9.557651,True
+resnet18,exp3_robust,0.5,2.02,8.477256,True
+resnet18,exp3_robust,0.6,1.26,7.483013,True

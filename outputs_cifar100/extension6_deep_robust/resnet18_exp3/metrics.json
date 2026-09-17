@@ -1,0 +1,16 @@
+{
+    "dataset": "cifar100",
+    "best_test_acc": 72.7,
+    "best_epoch": 145,
+    "total_epochs": 200,
+    "final_train_loss": 0.0018883502725004337,
+    "final_test_loss": 1.9250818737030029,
+    "final_train_acc": 99.98197115384616,
+    "final_test_acc": 66.97,
+    "final_alpha03_acc": 9.1,
+    "use_calibration": true,
+    "layerwise_alpha": true,
+    "asymmetric_sampling": true,
+    "exp_name": "Exp3_FullRobust",
+    "model_name": "resnet18"
+}
