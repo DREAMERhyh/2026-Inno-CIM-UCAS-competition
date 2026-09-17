@@ -44,14 +44,24 @@ CIFAR100_STD = (0.2673, 0.2564, 0.2762)
 
 
 def build_model(model_name: str, num_classes: int):
+    """主干工厂（与 readout 脚本一致；v4 增加 robust 版以便探测 NAT/Exp2 主干）"""
     if model_name == "simple_cnn":
         from models.simple_cnn import SimpleCNN
         return SimpleCNN(num_classes=num_classes)
-    raise ValueError(f"本探针先只支持 simple_cnn，收到 {model_name}")
+    if model_name == "robust_cnn":
+        from models.robust_cnn import RobustCNN
+        return RobustCNN(num_classes=num_classes, use_calibration=True)
+    if model_name == "vgg11":
+        from models.vgg11 import VGG11
+        return VGG11(num_classes=num_classes)
+    if model_name == "resnet18":
+        from models.resnet import ResNet18
+        return ResNet18(num_classes=num_classes)
+    raise ValueError(f"本探针支持 simple_cnn / robust_cnn / vgg11 / resnet18，收到 {model_name}")
 
 
-def load_clean_weights(model, model_name, dataset, device):
-    path = os.path.join(get_ckpt_root(dataset), model_name, "best_model.pth")
+def load_clean_weights(model, model_name, dataset, device, ckpt=None):
+    path = ckpt or os.path.join(get_ckpt_root(dataset), model_name, "best_model.pth")
     ckpt = torch.load(path, map_location=device)
     sd = ckpt["model_state_dict"] if isinstance(ckpt, dict) and "model_state_dict" in ckpt else ckpt
     model.load_state_dict(sd)
@@ -127,6 +137,8 @@ def main():
     ap.add_argument("--model", default="simple_cnn")
     ap.add_argument("--dataset", default="cifar100")
     ap.add_argument("--device", default=None)
+    ap.add_argument("--ckpt", default=None, help="主干权重路径（默认 = clean 权重）")
+    ap.add_argument("--backbone_tag", default="", help="主干标签（用于输出命名）")
     ap.add_argument("--n_train", type=int, default=10000)
     ap.add_argument("--n_test", type=int, default=10000)
     args = ap.parse_args()
@@ -134,7 +146,7 @@ def main():
     device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
     num_classes = get_num_classes(args.dataset)
     model = build_model(args.model, num_classes)
-    wpath = load_clean_weights(model, args.model, args.dataset, device)
+    wpath = load_clean_weights(model, args.model, args.dataset, device, ckpt=args.ckpt)
     print(f"[probe] 模型={args.model} 权重={wpath} device={device}")
 
     train_loader, test_loader = make_loaders(args.dataset)
@@ -179,7 +191,8 @@ def main():
         print(f"[probe] {name:<18} 同条件探针 {pA:6.2f}% | 干净训练探针 {pB:6.2f}% | "
               f"冻结头 {h_acc:6.2f}% | headroom {pA-h_acc:+7.2f}")
 
-    csv_path = os.path.join(out_dir, "probe_results.csv")
+    bb = args.backbone_tag or args.model
+    csv_path = os.path.join(out_dir, f"probe_results_{bb}.csv")
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(
             f, fieldnames=["condition", "probe_same_cond", "probe_clean_train", "head_acc", "headroom_same"])

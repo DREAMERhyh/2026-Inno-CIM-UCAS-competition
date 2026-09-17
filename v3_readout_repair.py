@@ -36,12 +36,16 @@ from utils.paths import get_ckpt_root, get_num_classes, get_outputs_root
 
 READOUT = None  # 全局读出层句柄（main 中赋值）
 
+DATASET_STATS = {
+    "cifar100": ((0.5071, 0.4865, 0.4409), (0.2673, 0.2564, 0.2762)),
+    "cifar10": ((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+}
 MEAN = (0.5071, 0.4865, 0.4409)
 STD = (0.2673, 0.2564, 0.2762)
 
 
 def build_backbone(name, nc):
-    """主干工厂（冻结用）：simple_cnn / vgg11 / resnet18"""
+    """主干工厂（冻结用）：clean 版与 robust 版（exp2/exp3 权重用）"""
     if name == "simple_cnn":
         from models.simple_cnn import SimpleCNN
         return SimpleCNN(num_classes=nc)
@@ -51,6 +55,15 @@ def build_backbone(name, nc):
     if name == "resnet18":
         from models.resnet import ResNet18
         return ResNet18(num_classes=nc)
+    if name == "robust_vgg11":
+        from models.robust_vgg11 import RobustVGG11
+        return RobustVGG11(num_classes=nc)
+    if name == "robust_resnet18":
+        from models.robust_resnet import RobustResNet18
+        return RobustResNet18(num_classes=nc)
+    if name == "robust_cnn":
+        from models.robust_cnn import RobustCNN
+        return RobustCNN(num_classes=nc, use_calibration=True)
     raise ValueError(f"未支持的主干: {name}")
 
 
@@ -66,10 +79,12 @@ def get_readout_module(model):
     raise ValueError("未找到读出层（最后的 Linear）")
 
 
-def build_loaders(batch_size=512):
-    tf = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean=MEAN, std=STD)])
-    tr = datasets.CIFAR100(root="./data", train=True, download=False, transform=tf)
-    te = datasets.CIFAR100(root="./data", train=False, download=False, transform=tf)
+def build_loaders(batch_size=512, dataset="cifar100"):
+    mean, std = DATASET_STATS[dataset]
+    tf = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean=mean, std=std)])
+    D = datasets.CIFAR100 if dataset == "cifar100" else datasets.CIFAR10
+    tr = D(root="./data", train=True, download=False, transform=tf)
+    te = D(root="./data", train=False, download=False, transform=tf)
     return (DataLoader(tr, batch_size=batch_size, shuffle=False, num_workers=0),
             DataLoader(te, batch_size=batch_size, shuffle=False, num_workers=0))
 
@@ -193,7 +208,14 @@ def train_mlp(X, Y, nc, device, epochs=200, lr=0.01, wd=1e-4, hidden=512):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--model", default="simple_cnn")
+    ap.add_argument("--model", default="simple_cnn",
+                    help="clean 权重时的模型名（兼容旧接口，等价于 --arch）")
+    ap.add_argument("--arch", default=None,
+                    choices=["simple_cnn", "vgg11", "resnet18",
+                             "robust_vgg11", "robust_resnet18", "robust_cnn"],
+                    help="主干架构类（默认 = --model）")
+    ap.add_argument("--ckpt", default=None, help="主干权重路径（默认 = clean 权重）")
+    ap.add_argument("--backbone_tag", default="", help="主干标签（用于命名/记录）")
     ap.add_argument("--dataset", default="cifar100")
     ap.add_argument("--alpha", type=float, default=0.3, help="读出适配所用的失真强度")
     ap.add_argument("--epochs_nat", type=int, default=6, help="readout-NAT 的轮数")
@@ -208,11 +230,17 @@ def main():
     random.seed(args.seed); np.random.seed(args.seed)
     torch.manual_seed(args.seed); torch.cuda.manual_seed_all(args.seed)
     nc = get_num_classes(args.dataset)
+    dataset_short = "c100" if args.dataset == "cifar100" else "c10"
     args.n_train = args.n_train or None  # 0 → None = 全量 50k
 
-    model = build_backbone(args.model, nc)
-    ck = torch.load(os.path.join(get_ckpt_root(args.dataset), args.model, "best_model.pth"),
-                    map_location=device)
+    arch = args.arch or args.model
+    tag_model = args.model.replace("_", "")
+    ckpt_path = args.ckpt or os.path.join(get_ckpt_root(args.dataset), args.model, "best_model.pth")
+    model = build_backbone(arch, nc)
+    print(f"[readout-repair] 主干架构={arch}")
+    print(f"[readout-repair] 主干权重={ckpt_path}"
+          + (f"  (tag={args.backbone_tag})" if args.backbone_tag else ""))
+    ck = torch.load(ckpt_path, map_location=device)
     model.load_state_dict(ck["model_state_dict"] if "model_state_dict" in ck else ck)
     model.to(device).eval()
     for p in model.parameters():
@@ -222,7 +250,7 @@ def main():
     print(f"[readout-repair] 读出层: {type(READOUT).__name__} (in_features={READOUT.in_features})")
     print(f"[readout-repair] 冻结主干 {args.model}（clean 权重），适配失真 α={args.alpha:+.2f}")
 
-    train_loader, test_loader = build_loaders()
+    train_loader, test_loader = build_loaders(dataset=args.dataset)
     print("[readout-repair] 提取特征（干净 + 失真）...")
     Xc_tr, Y_tr = extract_features(model, train_loader, 0.0, device, limit=args.n_train)
     Xd_tr, _ = extract_features(model, train_loader, args.alpha, device, limit=args.n_train)
@@ -259,7 +287,8 @@ def main():
     out_dir = os.path.join(get_outputs_root(args.dataset), "v3_readout_repair")
     os.makedirs(out_dir, exist_ok=True)
     tag = (f"n{args.n_train}" if args.n_train else "n50k") + (f"_s{args.seed}" if args.seed != 42 else "") + (f"_cr{args.clean_ratio}" if args.clean_ratio else "")
-    p = os.path.join(out_dir, f"readout_repair_{args.model}_alpha{args.alpha:+.2f}_{tag}.csv")
+    bb = args.backbone_tag or arch
+    p = os.path.join(out_dir, f"readout_repair_{dataset_short}_{bb}_alpha{args.alpha:+.2f}_{tag}.csv")
     with open(p, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=["readout"] + [str(a) for a in alphas])
         w.writeheader()
