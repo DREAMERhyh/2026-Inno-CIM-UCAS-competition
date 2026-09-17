@@ -1,5 +1,7 @@
 run,mode,profile,clean,neg0.3,pos0.3,mid_band,mean7,best_epoch,epochs,elapsed_min
+adv_uniform,adv,uniform,60.27,45.06,24.32,53.84,49.29,112,120,135.9
 budget_front,budget,front,60.72,46.76,19.56,52.3,48.04,120,120,52.3
 budget_rear,budget,rear,60.9,47.42,25.46,54.03,49.99,120,120,51.4
 budget_sens,budget,sens,60.07,40.3,26.13,52.8,48.24,119,120,51.4
 budget_uniform,budget,uniform,60.85,43.56,26.03,53.56,49.24,112,120,60.0
+curriculum_uniform,curriculum,uniform,60.25,45.62,21.78,51.93,47.91,113,120,64.2
