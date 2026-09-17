@@ -34,6 +34,8 @@ STATS = {
 }
 GRID = [0.0, 0.05, -0.05, 0.1, -0.1, 0.15, -0.15, 0.2, -0.2, 0.25, -0.25, 0.3, -0.3]
 EVAL_ALPHAS = [-0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3]
+TAU_GRID = [0.05, 0.10, 0.15, 0.20, 0.25]
+TAU_DEFAULT = 0.15
 
 
 def make_loader(dataset, train, n_limit):
@@ -147,25 +149,31 @@ def main():
         acc_clean = (lg_clean.argmax(1).cpu().numpy() == Yte).mean() * 100
         acc_rob = (lg_rob.argmax(1).cpu().numpy() == Yte).mean() * 100
         ahat = ridge.predict(Zte)
-        # 路由策略：|α̂| > τ 用鲁棒头，否则原始头
-        tau = 0.05
-        use_rob = np.abs(ahat) > tau
-        pred = np.where(use_rob, lg_rob.argmax(1).cpu().numpy(), lg_clean.argmax(1).cpu().numpy())
-        acc_route = (pred == Yte).mean() * 100
+        # 路由策略：|α̂| > τ 用鲁棒头，否则原始头（扫描多个 τ）
+        pc, pr = lg_clean.argmax(1).cpu().numpy(), lg_rob.argmax(1).cpu().numpy()
+        acc_by_tau = {}
+        for tau in TAU_GRID:
+            use_rob = np.abs(ahat) > tau
+            pred = np.where(use_rob, pr, pc)
+            acc_by_tau[tau] = round((pred == Yte).mean() * 100, 2)
+        acc_route = acc_by_tau[TAU_DEFAULT]
         rows.append({
             "alpha": a, "acc_clean_head": round(acc_clean, 2), "acc_robust_head": round(acc_rob, 2),
-            "acc_router": round(acc_route, 2), "oracle": round(max(acc_clean, acc_rob), 2),
-            "ahat_mean": round(float(ahat.mean()), 4), "route_to_robust_frac": round(float(use_rob.mean()), 4),
+            "acc_router": acc_route, "oracle": round(max(acc_clean, acc_rob), 2),
+            "ahat_mean": round(float(ahat.mean()), 4),
+            **{f"router_tau{t}": acc_by_tau[t] for t in TAU_GRID},
         })
         print(f"[routing] α={a:+.2f} | clean头 {acc_clean:6.2f} | 鲁棒头 {acc_rob:6.2f} | "
               f"**路由 {acc_route:6.2f}** | oracle {rows[-1]['oracle']:6.2f} | "
-              f"α̂={ahat.mean():+.3f} 路由到鲁棒头比例={use_rob.mean():.2f}")
+              f"α̂={ahat.mean():+.3f} | 各τ: " + " ".join(f"{t}:{acc_by_tau[t]:.2f}" for t in TAU_GRID))
 
     def mean_of(k):
         return round(float(np.mean([r[k] for r in rows])), 2)
 
     print(f"\n[routing] 7 点均值：clean头 {mean_of('acc_clean_head')} | 鲁棒头 {mean_of('acc_robust_head')} | "
-          f"**路由 {mean_of('acc_router')}** | oracle {mean_of('oracle')}")
+          f"**路由(τ=0.15) {mean_of('acc_router')}** | oracle {mean_of('oracle')}")
+    print("[routing] 各 τ 的 7 点均值: " + " | ".join(
+        f"τ={t}: {round(float(np.mean([r[f'router_tau{t}'] for r in rows])), 2)}" for t in TAU_GRID))
 
     out_dir = os.path.join(get_outputs_root(args.dataset), "v4_alpha_routing")
     os.makedirs(out_dir, exist_ok=True)
