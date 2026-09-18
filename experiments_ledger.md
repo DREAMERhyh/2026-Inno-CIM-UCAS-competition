@@ -1660,6 +1660,71 @@ C4 由 3/7 跌到 1/7、软门控**由"赢 oracle +0.12"变为"输 oracle −0.0
 **对论文的影响（已完成同步）**：`论文.md` 的 §3.1 表换成 24ep，
 §4.1 的每一条增益都标了口径，摘要与附录 A 的"13~26"改为实测区间 +6.71~+42.93。
 
+### 13.10 P1-6【预登记】plain 主干 seed 42 补跑 —— 闭合 L9 的方差对照
+
+**为什么做**：§13.8 末段与 `论文.md` §2 的 L9 说"没有迹象表明加池化会增大 clean 的种子方差"，
+但**同一脚本下的 plain 主干只有 s43/s44 两个种子**（`outputs_cifar100/v3_methods/plain_uniform_s4{3,4}`），
+s42 那一格从来没跑过，所以做不成 3 vs 3 的等自由度对照。
+同时 §12.11 的 3-seed 表混用了两个脚本（s42 来自 `task2_nat.py`，s43/s44 来自
+`v3_methods_simplecnn.py --mode plain`），这条协议不纯记在 `论文.md` 勘误 3 里。
+
+**协议**：`v3_methods_simplecnn.py --mode plain --profile uniform --dataset cifar100 --epochs 120 --seed 42`，
+与既有 s43/s44 逐字一致。产物落 `checkpoints_cifar100/v3_plain_uniform/` 与
+`outputs_cifar100/v3_methods/plain_uniform/`（无后缀，与 mp 的 s42 命名惯例一致）。
+**跑前已核验这两个目录都不存在**，不覆盖任何既有产物。
+配对自检：`alpha_sensitivity.csv` 的 α=0 行必须等于 `metrics.json` 的 `best_test_acc`。
+
+**预登记判据**（记 plain 同脚本 3-seed clean 的**样本标准差**为 $s_{plain}$；跑后不得修改）：
+
+| # | 条件 | 判决 |
+|---|---|---|
+| **①** | $s_{plain} \le 0.25$ | **"加池化不增大 clean 方差"成立**（mp ±0.12 / avg ±0.07 / plain 同量级）；原表述恢复，但须注明三组都是 n=3、std 估计本身不准 |
+| **②** | $s_{plain} \ge 0.40$ | 改写为 **"plain 的 clean 方差明显大于池化变体，提示降维可能降低方差"**，标**"提示性"**，并写明确认需更多种子。**不许直接写成定论** |
+| **③** | 介于两者之间 | 维持中性表述 **"没有迹象表明增大；对照未能分辨"** |
+
+**顺带的预登记项**：跑完后用 `plain_uniform` / `plain_uniform_s43` / `plain_uniform_s44`
+三个**同脚本**种子重算 NAT 训练的 clean 与 $+0.3$ 方差，**替换** L9 甲组里混用两个脚本的
+±0.51 / ±3.15。历史混合值降为脚注保留（不删除，因为 §12.11 的结论建立在它上面）。
+
+**红线**：eval 语义不动；训练严格串行；不覆盖任何既有产物。
+
+### 13.11 P2-7【预登记】CIFAR-10 mp 主干补 seed 43/44 + 每主干一次完整配方 —— 裁决 C1 的最终身份
+
+**为什么做**：§13.7 的 CIFAR-10 预登记里，主判据 C1（mean7(soft) > max(两单头)）只以 **+0.17** 通过，
+而该实验**只用了 1 个主干 seed**（3 seeds 变的是鲁棒头与估计器，不是主干）。
+`论文.md` §4.2 因此把 C1 标成"弱通过"，并把它列为局限第 2/5 条。
+
+**训练（各约 35 分钟，串行）**：
+`v3_methods_simplecnn.py --mode clean --profile uniform --arch simple_cnn_mp --dataset cifar10
+--epochs 120 --seed 43`（`--seed 44` 同理），
+产物带 `_s43`/`_s44` 后缀，落 `outputs/v3_methods/` 与 `checkpoints/` 两侧。
+**跑前已核验这些目录都不存在**，不覆盖 s42 的产物。
+
+**配方（每个主干 seed 各一次）**：
+`v5_full_recipe.py --arch simple_cnn_mp --dataset cifar10 --seeds {主干seed} --backbone_tag _s{主干seed}
+--tag _bs{主干seed}`。除主干外一切不变（13 点离散 α 池、24ep、α 估计器在该主干特征上重训、
+头/估计器 seed = 主干 seed）。输出落 `recipe_simple_cnn_mp_bs43.csv` / `_bs44.csv`，
+**不覆盖** s42 的 `recipe_simple_cnn_mp.csv`。
+（为支持这一跑，`v5_full_recipe.py` 新增 `--backbone_tag` 与 `--tag` 两个参数，默认值保持原行为不变。）
+
+**预登记判据**（记 $m_i = \text{mean7}(\text{软门控}) - \max(\text{mean7 干净头}, \text{mean7 鲁棒头})$，
+$i \in \{42\ (\text{已有}, +0.17),\ 43,\ 44\}$；跑后不得修改）：
+
+| # | 条件 | 判决 |
+|---|---|---|
+| **①** | 三个 $m$ **全部 > 0** | C1 维持 **"弱通过"**，加注"3 个主干种子方向一致" |
+| **②** | **任一 $m \le 0$** | C1 改判 **"不可分辨"**，软门控在 CIFAR-10 的定性定为 **"与单头不可区分"** |
+
+**两种情况下部署推荐都不变**（CIFAR-10 用单鲁棒头），变的只是措辞。
+
+**顺带（同样预登记）**：记录每个主干的（鲁棒头 clean 代价, 门控红利）二元组，与既有的三个点
+（CIFAR-100/mp −5.89→+2.90、CIFAR-10/mp −0.87→+0.17、CIFAR-10/plain −0.54→−0.28）并成五个点，
+用**相关系数 + 肉眼判断**看"红利 = 代价回收"这条关系的线性度，**不许拟合多参数模型**。
+特别检验：若某新主干的 clean 代价 > 1 pp，红利是否随之变大（这是这条直线的**正向检验点**）。
+
+**红线**：eval 语义不动（全量测试集 + best 权重 + 7 点扫描 + α=0 行 = `metrics.best_test_acc`）；
+训练严格串行；产物零覆盖。
+
 ## 10. 方法论旗标（更新版）
 
 | # | 旗标 | 状态 | 本阶段处置 |

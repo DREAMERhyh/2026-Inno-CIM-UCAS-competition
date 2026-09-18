@@ -100,6 +100,9 @@ def main():
     ap.add_argument("--arch", default="simple_cnn_mp")
     ap.add_argument("--dataset", default="cifar100")
     ap.add_argument("--seeds", default="42,43,44")
+    ap.add_argument("--backbone_tag", default="",
+                    help="主干 checkpoint 后缀；空=按现有 s42 惯例取 v3_{arch}_clean_uniform（P0-5 新增）")
+    ap.add_argument("--tag", default="", help="输出文件名后缀，避免覆盖既有 recipe（P0-5 新增）")
     ap.add_argument("--device", default=None)
     args = ap.parse_args()
     dev = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
@@ -107,7 +110,8 @@ def main():
     seeds = [int(s) for s in args.seeds.split(",")]
 
     model = build_arch(args.arch, nc)
-    ck = os.path.join(get_ckpt_root(args.dataset), f"v3_{args.arch}_clean_uniform", "best_model.pth")
+    ck = os.path.join(get_ckpt_root(args.dataset),
+                      f"v3_{args.arch}_clean_uniform{args.backbone_tag}", "best_model.pth")
     if not os.path.exists(ck):
         ck = os.path.join(get_ckpt_root(args.dataset), "simple_cnn", "best_model.pth")
     sd = torch.load(ck, map_location=dev)
@@ -195,7 +199,7 @@ def main():
 
     out = os.path.join(get_outputs_root(args.dataset), "v5_full_recipe")
     os.makedirs(out, exist_ok=True)
-    fp = os.path.join(out, f"recipe_{args.arch}.csv")
+    fp = os.path.join(out, f"recipe_{args.arch}{args.tag}.csv")
     with open(fp, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
         w.writeheader(); w.writerows(rows)
