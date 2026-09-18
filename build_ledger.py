@@ -262,30 +262,32 @@ def harvest_v3(rows):
                 "pairing_check": pc, "artifact_path": d.replace("\\", "/"),
                 "verdict": mj.get("mode", "") + "/" + str(mj.get("profile", "")),
             })
-    # --- v3_readout_repair：每个 (模型, 配置) 取 e_readout_NAT 与 a_original_fc 两行 ---
-    for f in sorted(glob.glob("outputs_cifar100/v3_readout_repair/*.csv")):
-        base = os.path.basename(f).replace(".csv", "")
-        rr = read_csv_rows(f)
-        if not rr:
-            continue
-        cols = [c for c in rr[0].keys() if c != "readout"]
-        for target in ("a_original_fc", "e_readout_NAT"):
-            row = next((r for r in rr if r["readout"] == target), None)
-            if row is None:
+    # --- v3_readout_repair：每个 (模型, 配置) 取 e_readout_NAT 与 a_original_fc 两行（两个数据集都扫）---
+    for root, ds in (("outputs_cifar100", "cifar100"), ("outputs", "cifar10")):
+        for f in sorted(glob.glob(f"{root}/v3_readout_repair/*.csv")):
+            base = os.path.basename(f).replace(".csv", "")
+            rr = read_csv_rows(f)
+            if not rr:
                 continue
-            amap = {float(c): float(row[c]) for c in cols}
-            m = metrics_from_scan(amap)
-            rows.append({
-                "run_id": f"cifar100|{base}|{target}|7pt",
-                "date": mtime(f), "dataset": "cifar100", "model": base.split("_alpha")[0].replace("readout_repair_", ""),
-                "weight_type": target, "seed": 42, "epochs": "",
-                "alpha_protocol": "7pt(读出适配)", "clean": m["clean"],
-                "drop_at_0.3": m["drop_at_0.3"], "mid_band_mean": m["mid_band_mean"],
-                "neg_0.3": m["neg_0.3"], "pos_0.3": m["pos_0.3"],
-                "params": "", "pairing_check": "n/a(读出适配)",
-                "artifact_path": f.replace("\\", "/"),
-                "verdict": "readout-NAT 实验",
-            })
+            cols = [c for c in rr[0].keys() if c != "readout"]
+            for target in ("a_original_fc", "e_readout_NAT"):
+                row = next((r for r in rr if r["readout"] == target), None)
+                if row is None:
+                    continue
+                amap = {float(c): float(row[c]) for c in cols}
+                m = metrics_from_scan(amap)
+                rows.append({
+                    "run_id": f"{ds}|{base}|{target}|7pt",
+                    "date": mtime(f), "dataset": ds,
+                    "model": base.split("_alpha")[0].replace("readout_repair_", ""),
+                    "weight_type": target, "seed": 42, "epochs": "",
+                    "alpha_protocol": "7pt(读出适配)", "clean": m["clean"],
+                    "drop_at_0.3": m["drop_at_0.3"], "mid_band_mean": m["mid_band_mean"],
+                    "neg_0.3": m["neg_0.3"], "pos_0.3": m["pos_0.3"],
+                    "params": "", "pairing_check": "n/a(读出适配)",
+                    "artifact_path": f.replace("\\", "/"),
+                    "verdict": "readout-NAT 实验",
+                })
 
 
 def main():
