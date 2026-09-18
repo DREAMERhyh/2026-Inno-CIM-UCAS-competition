@@ -357,6 +357,11 @@ def train(args, model, train_loader, test_loader, device, names):
                     amap = None  # 纯高斯训练（无 α 注入），用于 2×2 设计的 σ-only 格
                 else:  # joint / plain
                     amap = {n: random.uniform(-0.3, 0.3) for n in names}
+                # 粒度开关（第六阶段 P4a）：shared = 全层共用一个 α。
+                # 实现上取"第一个抽到的值"广播给所有层 —— 与 per-layer 消耗同样多的随机数，
+                # 所以默认路径（per-layer）的 RNG 流逐位不变，本分支根本不会执行。
+                if amap is not None and args.alpha_granularity == "shared":
+                    amap = {n: next(iter(amap.values())) for n in amap}
                 extra_hooks = []
                 if args.mode in ("joint", "gauss"):
                     sigma = random.uniform(0.0, 0.3)
@@ -419,6 +424,10 @@ def main():
     ap.add_argument("--eval_wide", action="store_true", help="最终评估用 15 点宽扫描（默认 7 点）")
     ap.add_argument("--adv_steps", type=int, default=2, help="PGD 内层步数")
     ap.add_argument("--adv_lr", type=float, default=0.1, help="PGD 内层步长")
+    ap.add_argument("--alpha-granularity", default="per-layer",
+                    choices=["per-layer", "shared"],
+                    help="α 采样粒度（第六阶段 P4a 新增）。per-layer=逐层独立（默认，原行为）；"
+                         "shared=每 batch 采一个 α 共享全层。默认值下新增代码不执行。")
     ap.add_argument("--tag", default="")
     ap.add_argument("--num_workers", type=int, default=0,
                     help="DataLoader 工作进程数（内存受限时保持 0）")
