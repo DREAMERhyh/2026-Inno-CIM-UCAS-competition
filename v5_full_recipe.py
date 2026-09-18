@@ -36,11 +36,11 @@ N_TRAIN, N_VAL, N_TEST = 20000, 5000, 10000
 
 
 def build_arch(name, nc):
-    if name.startswith("simple_cnn_mp"):
-        from v3_methods_simplecnn import build_arch as ba
-        return ba(name, nc)
-    from models.simple_cnn import SimpleCNN
-    return SimpleCNN(num_classes=nc)
+    # 懒加载工厂，复用 v3_readout_repair 的骨架注册表
+    # （含 robust_vgg11 / robust_resnet18 / simple_cnn_mp，见 P2 扩展）。
+    # 默认参数下行为与改造前一致：simple_cnn 仍是 models.simple_cnn.SimpleCNN。
+    from v3_readout_repair import build_backbone
+    return build_backbone(name, nc)
 
 
 def make_loaders(dataset):
@@ -103,6 +103,9 @@ def main():
     ap.add_argument("--backbone_tag", default="",
                     help="主干 checkpoint 后缀；空=按现有 s42 惯例取 v3_{arch}_clean_uniform（P0-5 新增）")
     ap.add_argument("--tag", default="", help="输出文件名后缀，避免覆盖既有 recipe（P0-5 新增）")
+    ap.add_argument("--ckpt", default=None,
+                    help="主干权重路径；默认按 v3_{arch}_clean_uniform{backbone_tag} 推导（P2 新增，"
+                         "用于 Exp2/Exp3 这类不在 v3_ 命名下的深层主干）")
     ap.add_argument("--device", default=None)
     args = ap.parse_args()
     dev = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
@@ -110,8 +113,8 @@ def main():
     seeds = [int(s) for s in args.seeds.split(",")]
 
     model = build_arch(args.arch, nc)
-    ck = os.path.join(get_ckpt_root(args.dataset),
-                      f"v3_{args.arch}_clean_uniform{args.backbone_tag}", "best_model.pth")
+    ck = args.ckpt or os.path.join(get_ckpt_root(args.dataset),
+                                   f"v3_{args.arch}_clean_uniform{args.backbone_tag}", "best_model.pth")
     if not os.path.exists(ck):
         ck = os.path.join(get_ckpt_root(args.dataset), "simple_cnn", "best_model.pth")
     sd = torch.load(ck, map_location=dev)
@@ -119,8 +122,10 @@ def main():
     model.to(dev).eval()
     for p in model.parameters():
         p.requires_grad_(False)
-    readout = model.fc
-    print(f"[P0-2] 主干={args.arch} 权重={ck}")
+    from v3_readout_repair import get_readout_module
+    readout = get_readout_module(model)
+    print(f"[P0-2] 主干={args.arch} 权重={ck} "
+          f"读出层={type(readout).__name__}(in_features={readout.in_features})")
 
     ds_tr, ds_te = make_loaders(args.dataset)
     all_idx = np.arange(len(ds_tr))

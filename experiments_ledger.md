@@ -1932,6 +1932,93 @@ RandomCrop(32,4) + HorizontalFlip、Normalize、模型定义、seed 42。
 **红线**：eval 语义不动（全量测试集 + best 权重 + 7 点扫描 + α=0 行 = `metrics.best_test_acc`）；
 训练严格串行；产物零覆盖。
 
+---
+
+## 14. 第六阶段实验
+
+> 主题：**定律化与落地**。把前五阶段的经验配方升级为有预测力的定律，并补落地推演。
+> 所有判据跑前登记、跑后不改；降级措辞（初步/提示性/不可分辨）逐字保留。
+> 本轮新增代码改动均注明"默认参数下行为不变"。
+
+### 14.1 P1【预登记】秩塌陷 ↔ 读出可恢复的定量曲线（L4 与 L6 接线）
+
+**动机**：L4 说正侧失真是"维度丢失"（有效秩塌陷），L6 说塌陷后的低秩子空间里信息仍线性可达。
+两条律目前是分开陈述的，中间没有定量连接。
+本节把"秩损失"当横轴、"读出能恢复多少"当纵轴，看两点能不能接上。
+
+**设计**：
+
+**(a) 秩探针**（纯前向 + SVD，无训练）。用改造后的 `v5_probe_rank_collapse.py`
+（新增 `--arch` / `--ckpt` / `--tag`，读出层定位改走 `v3_readout_repair.get_readout_module`；
+**默认参数下行为不变**）在两个深层冻结主干上各跑一次：
+
+| 主干 | 架构名 | 权重路径 | 读数维度 |
+|---|---|---|---|
+| VGG-11（Exp2 校准） | `robust_vgg11` | `checkpoints_cifar100/Exp2_Calib+Layerwise_vgg11/best_model.pth` | 512 |
+| ResNet-18（Exp3 非对称） | `robust_resnet18` | `checkpoints_cifar100/Exp3_FullRobust_resnet18/best_model.pth` | 512 |
+
+α ∈ {0, ±0.1, ±0.2, ±0.3, ±0.4, ±0.5}（11 点），全量测试集 10,000。
+产物 `outputs_cifar100/v5_rank_collapse/rank_stats_{exp2vgg11,exp3resnet18}.csv`（新文件，不覆盖）。
+
+**(b) 读出可恢复量**：**不重跑**。这两个主干的 readout-NAT(24ep, 20k, 3 seed)
+在第五阶段已经跑过（`outputs_cifar100/v3_readout_repair/` 第 80–89、92–101 行）。
+SimpleCNN 那一点也用既有的 24ep 结果。
+
+**口径对齐（红线）**：同一条路径内取数，避免跨路径偏差（§6 第 7 条）。
+- 恢复率 $R(\alpha) = \text{readout\_NAT}(\alpha) \; / \; \text{clean}$，
+  其中 **clean 取同一个读出 CSV 的 `a_original_fc` 行在 $\alpha=0$ 的值**（不是 task1 扫描值）。
+- 秩损失 $= 1 - \text{rank\_eff}(\alpha)/\text{rank\_eff}(0)$，与读出评估用同一个冻结主干。
+
+**预登记判据**（跑后不改）：在 **$\alpha=+0.3$** 上取三个点（模型 = SimpleCNN / VGG-11-Exp2 / ResNet-18-Exp3），
+画 (秩损失%, 恢复率)：
+
+| 观察 | 判决 |
+|---|---|
+| 三点**单调**（秩损失越大 → 恢复率越低） | 写 **"趋势成立，三点不足以定曲线形状"** |
+| 三点**不单调** | **如实写"不单调"**，不做任何洗白 |
+
+补充记录（不进判据）：七个 $\alpha$ 点（$\pm0.1\ldots\pm0.3$）上的完整曲线，
+供后续看形状用。
+
+**预算**：两次前向探针，约 10~20 分钟。无训练。
+
+### 14.2 P2【预登记】深层主干的门控行为 —— 红利-代价表的第六、七个点
+
+**动机**：§13.11 的红利-代价表只有五个点，且五个点挤在**两个量级**上
+（CIFAR-100 的 −5.89 与 CIFAR-10 的 −0.54~−1.04）。
+**2~5 pp 这一段是空的**，而深层主干的鲁棒头干净代价预期正好落在这个区间 ——
+这正是判别"线性还是拐弯"最有价值的一段。
+
+**设计**：在同一个 Exp2_vgg11 / Exp3_resnet18 冻结主干上各挂双头
+（干净头 = 原有分类器；鲁棒头 = 13 点离散 α 池、24ep、20k 样本），
+与 §3.3 的配方**逐字同口径**，评估走 `v5_full_recipe` 路径：
+
+```
+v5_full_recipe.py --arch robust_vgg11 --ckpt checkpoints_cifar100/Exp2_Calib+Layerwise_vgg11/best_model.pth \
+    --dataset cifar100 --seeds 42,43,44 --tag _exp2vgg11
+v5_full_recipe.py --arch robust_resnet18 --ckpt checkpoints_cifar100/Exp3_FullRobust_resnet18/best_model.pth \
+    --dataset cifar100 --seeds 42,43,44 --tag _exp3resnet18
+```
+
+产物 `recipe_robust_vgg11_exp2vgg11.csv` / `recipe_robust_resnet18_exp3resnet18.csv`（新文件，不覆盖）。
+代码侧需要的小改造（`build_arch` 与读出定位改走 `v3_readout_repair` 的注册表、
+新增 `--ckpt`）**已完成并做过 CPU 冒烟测试**，默认参数下行为不变。
+
+**head seed 数**：用 **3 个**（42/43/44），与 §3.3 的 CIFAR-100/mp 那一点同口径；
+主干本身是单次训练的固定产物（这一份方差测不到，见 §6 局限第 3 条）。
+
+**预登记判据**（跑后不改，**不预设立场**）：
+1. 记录每个主干的（鲁棒头在 $\alpha=0$ 的 clean 代价, 门控红利 = mean7(soft) − mean7(robust)），
+   并入红利-代价表成为**第六、七个点**。
+2. 记录 $m = \text{mean7}(\text{软门控}) - \max(\text{mean7 干净头}, \text{mean7 鲁棒头})$，
+   并与该主干的 mean7 种子噪声带比较，**报告数值与"是否超出噪声"的判断**。
+3. **不设"应该成立/应该不成立"的方向**。三种可能都照实记：
+   - 代价落在 2~4 pp 且红利随之变大 → 支持"线性"，且这是判别力最强的一段；
+   - 代价落在 2~4 pp 但红利没变大（对应 §13.11 里"代价 >1pp 的正向检验未通过"）→ **加强"不是线性"**；
+   - 深层门控重新变得值得 → 这是对 CIFAR-10"不可分辨"结论的重要边界补充，单列一段说明。
+
+**预算**：两次配方运行（各 3 个 head seed），约 1~1.5 小时。无主干训练。
+
 ## 10. 方法论旗标（更新版）
 
 | # | 旗标 | 状态 | 本阶段处置 |

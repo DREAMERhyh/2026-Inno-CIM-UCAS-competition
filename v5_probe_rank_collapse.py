@@ -82,6 +82,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dataset", default="cifar100")
     ap.add_argument("--arch", default="simple_cnn")
+    ap.add_argument("--ckpt", default=None, help="主干权重路径；默认 {ckpt_root}/{arch}/best_model.pth")
+    ap.add_argument("--tag", default="", help="输出文件名后缀，避免覆盖（默认空=原行为 rank_stats.csv）")
     ap.add_argument("--n", type=int, default=10000)
     ap.add_argument("--device", default=None)
     args = ap.parse_args()
@@ -93,17 +95,21 @@ def main():
     ds = D(root="./data", train=False, download=False, transform=tf)
     loader = DataLoader(ds, batch_size=512, shuffle=False, num_workers=0)
 
-    from models.simple_cnn import SimpleCNN
-    model = SimpleCNN(num_classes=nc)
-    ck = os.path.join(get_ckpt_root(args.dataset), args.arch, "best_model.pth")
+    # 主干工厂与读出定位复用 v3_readout_repair 的实现，保证与读出适配走同一套口径
+    from v3_readout_repair import build_backbone, get_readout_module
+    model = build_backbone(args.arch, nc)
+    ck = args.ckpt or os.path.join(get_ckpt_root(args.dataset), args.arch, "best_model.pth")
     sd = torch.load(ck, map_location=dev)
     model.load_state_dict(sd["model_state_dict"] if "model_state_dict" in sd else sd)
     model.to(dev).eval()
+    readout = get_readout_module(model)
+    print(f"[rank-probe] arch={args.arch} ckpt={ck} 读出层={type(readout).__name__} "
+          f"(in_features={readout.in_features})")
 
     rows = []
     print(f"{'α':>6} {'有效秩':>10} {'条件数κ(99%)':>14} {'类间/类内散布':>14} {'维度':>6}")
     for a in ALPHAS:
-        X, Y = features(model, loader, dev, a, model.fc, args.n)
+        X, Y = features(model, loader, dev, a, readout, args.n)
         re_, ka, fi, dim = rank_stats(X, Y)
         rows.append({"alpha": a, "rank_eff": round(re_, 3), "kappa99": round(ka, 2),
                      "fisher": round(fi, 5), "dim": dim, "n": len(X)})
@@ -111,7 +117,7 @@ def main():
 
     out = os.path.join(get_outputs_root(args.dataset), "v5_rank_collapse")
     os.makedirs(out, exist_ok=True)
-    fp = os.path.join(out, "rank_stats.csv")
+    fp = os.path.join(out, f"rank_stats{args.tag}.csv")
     with open(fp, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
         w.writeheader(); w.writerows(rows)
