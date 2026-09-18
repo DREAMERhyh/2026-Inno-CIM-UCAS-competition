@@ -40,6 +40,12 @@ from utils.paths import get_ckpt_root, get_num_classes, get_outputs_root
 CIFAR100_MEAN = (0.5071, 0.4865, 0.4409)
 CIFAR100_STD = (0.2673, 0.2564, 0.2762)
 
+# 数据集统计量（与 v3_readout_repair.py 保持一致）
+DATASET_STATS = {
+    "cifar100": (CIFAR100_MEAN, CIFAR100_STD),
+    "cifar10": ((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+}
+
 # 预算轮廓（Σ r_l = 1.5，允许集中轮廓的顶层略超 0.3，上限 0.45）
 BUDGET_PROFILES = {
     "uniform": [0.30, 0.30, 0.30, 0.30, 0.30],
@@ -58,19 +64,21 @@ def set_seed(seed=42):
     os.environ["PYTHONHASHSEED"] = str(seed)
 
 
-def build_loaders(batch_size, num_workers=2):
+def build_loaders(batch_size, num_workers=2, dataset="cifar100"):
+    mean, std = DATASET_STATS[dataset]
+    D = datasets.CIFAR100 if dataset == "cifar100" else datasets.CIFAR10
     tf_train = transforms.Compose([
         transforms.RandomCrop(32, padding=4),
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.ToTensor(),
-        transforms.Normalize(mean=CIFAR100_MEAN, std=CIFAR100_STD),
+        transforms.Normalize(mean=mean, std=std),
     ])
     tf_test = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize(mean=CIFAR100_MEAN, std=CIFAR100_STD),
+        transforms.Normalize(mean=mean, std=std),
     ])
-    tr = datasets.CIFAR100(root="./data", train=True, download=False, transform=tf_train)
-    te = datasets.CIFAR100(root="./data", train=False, download=False, transform=tf_test)
+    tr = D(root="./data", train=True, download=False, transform=tf_train)
+    te = D(root="./data", train=False, download=False, transform=tf_test)
     return (DataLoader(tr, batch_size=batch_size, shuffle=True, num_workers=num_workers, drop_last=True),
             DataLoader(te, batch_size=256, shuffle=False, num_workers=num_workers))
 
@@ -437,7 +445,7 @@ def main():
     print(f"[v3-methods] layers={names}")
     print(f"[v3-methods] ckpt={args.ckpt_dir}\n[v3-methods] out={args.out_dir}")
 
-    train_loader, test_loader = build_loaders(args.batch_size, args.num_workers)
+    train_loader, test_loader = build_loaders(args.batch_size, args.num_workers, dataset=args.dataset)
     t0 = time.time()
     best_acc, best_epoch, final_a03, hist = train(args, model, train_loader, test_loader, device, names)
 

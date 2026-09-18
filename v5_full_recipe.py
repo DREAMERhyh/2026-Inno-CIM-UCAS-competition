@@ -216,8 +216,11 @@ def main():
     print(f"{'均值':>5} {m[:,0].mean():>7.2f} {m[:,1].mean():>7.2f} "
           f"{'—':>7} {m[:,2].mean():>7.2f}   ±std: clean {m[:,0].std():.2f}, mean7 {m[:,2].std():.2f}")
     ok = (m[:, 2].mean() > 54.0) and (m[:, 0].mean() > 60.5) and (m[:, 1].mean() > 48.5)
-    print(f"\n[判据] mean7>54.0 且 clean>60.5 且 +0.3>48.5 → "
-          f"{'✅ 部署配方确立' if ok else '❌ 未达标，需逐组件消融'}")
+    if args.dataset == "cifar100":
+        print(f"\n[判据] mean7>54.0 且 clean>60.5 且 +0.3>48.5 → "
+              f"{'✅ 部署配方确立' if ok else '❌ 未达标，需逐组件消融'}")
+    else:
+        print(f"\n[判据] {args.dataset} 无内置门槛（C1–C5 由预登记脚本 v5_p0c_criteria.py 单独评估，见台账 §13.7）")
     print(f"[saved] {fp}")
 
 
