@@ -44,11 +44,12 @@ def summarize(rows, seeds):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dataset", default="cifar10")
+    ap.add_argument("--tag", default="", help="recipe 文件名后缀（P2-7 用，如 _bs43）；默认空=原行为")
     args = ap.parse_args()
     root = os.path.join(get_outputs_root(args.dataset), "v5_full_recipe")
 
-    mp = load(os.path.join(root, "recipe_simple_cnn_mp.csv"))
-    plain_path = os.path.join(root, "recipe_simple_cnn.csv")
+    mp = load(os.path.join(root, f"recipe_simple_cnn_mp{args.tag}.csv"))
+    plain_path = os.path.join(root, f"recipe_simple_cnn{args.tag}.csv")
     plain = load(plain_path) if os.path.exists(plain_path) else None
     seeds = sorted({int(r["seed"]) for r in mp})
     S = summarize(mp, seeds)
