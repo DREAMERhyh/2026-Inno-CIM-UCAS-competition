@@ -129,13 +129,17 @@ def harvest_dataset(rows, root, dataset):
             f"{root}/{model}/metrics.json",
             f"{root}/task1_{tag}/",
             "train.py clean + task1 敏感性扫描")
-    # ---- NAT（task2）----
+    # ---- NAT（task2）---- 逐个 glob，兼容 --tag 后缀（如 scratch_s43，第六阶段 P0）
+    import glob as _glob
     for tag in ("simplecnn", "vgg11", "resnet18"):
         for mode in ("scratch", "finetune"):
-            d = f"{root}/task2_{tag}/{mode}"
-            add(rows, dataset, tag.replace("simplecnn", "simple_cnn"), f"nat_{mode}", "7pt",
-                f"{d}/alpha_sensitivity.csv", f"{d}/metrics.json", f"{d}/",
-                f"NAT-{mode}")
+            for d in sorted(_glob.glob(f"{root}/task2_{tag}/{mode}*")):
+                if not os.path.isdir(d):
+                    continue
+                md = os.path.basename(d)
+                add(rows, dataset, tag.replace("simplecnn", "simple_cnn"), f"nat_{md}", "7pt",
+                    f"{d}/alpha_sensitivity.csv", f"{d}/metrics.json", f"{d}/",
+                    f"NAT-{md}")
     # ---- task3 鲁棒变体（仅 simplecnn 家族）----
     for exp in ("Exp1_CalibOnly", "Exp2_Calib+Layerwise", "Exp3_FullRobust"):
         d = f"{root}/task3_simplecnn/{exp}"

@@ -27,6 +27,8 @@ cifar100|simple_cnn|clean|7pt,2026-09-02,cifar100,simple_cnn,clean,42,120,7pt,59
 cifar100|vgg11|clean|7pt,2026-09-02,cifar100,vgg11,clean,42,200,7pt,67.09,50.17,50.8525,24.48,16.92,9277284,0.0000 PASS,outputs_cifar100/task1_vgg11/,train.py clean + task1 敏感性扫描
 cifar100|resnet18|clean|7pt,2026-09-02,cifar100,resnet18,clean,42,200,7pt,72.09,69.39,29.325,3.25,2.7,11220132,0.0000 PASS,outputs_cifar100/task1_resnet18/,train.py clean + task1 敏感性扫描
 cifar100|simple_cnn|nat_scratch|7pt,2026-09-02,cifar100,simple_cnn,nat_scratch,42,120,7pt,60.7,39.29,52.7425,46.2,21.41,254084,0.0000 PASS,outputs_cifar100/task2_simplecnn/scratch/,NAT-scratch
+cifar100|simple_cnn|nat_scratch_s43|7pt,2026-09-19,cifar100,simple_cnn,nat_scratch_s43,42,120,7pt,60.65,38.63,53.2475,45.76,22.02,254084,0.0000 PASS,outputs_cifar100/task2_simplecnn/scratch_s43/,NAT-scratch_s43
+cifar100|simple_cnn|nat_scratch_s44|7pt,2026-09-19,cifar100,simple_cnn,nat_scratch_s44,42,120,7pt,60.65,40.98,52.4625,43.6,19.67,254084,0.0000 PASS,outputs_cifar100/task2_simplecnn/scratch_s44/,NAT-scratch_s44
 cifar100|simple_cnn|nat_finetune|7pt,2026-09-02,cifar100,simple_cnn,nat_finetune,42,120,7pt,60.16,35.35,53.0425,45.79,24.81,254084,0.0000 PASS,outputs_cifar100/task2_simplecnn/finetune/,NAT-finetune
 cifar100|vgg11|nat_scratch|7pt,2026-09-02,cifar100,vgg11,nat_scratch,42,200,7pt,67.25,45.36,55.0375,34.07,21.89,9277284,0.0000 PASS,outputs_cifar100/task2_vgg11/scratch/,NAT-scratch
 cifar100|vgg11|nat_finetune|7pt,2026-09-02,cifar100,vgg11,nat_finetune,42,200,7pt,67.12,47.32,52.1825,25.21,19.8,9277284,0.0000 PASS,outputs_cifar100/task2_vgg11/finetune/,NAT-finetune
