@@ -1901,6 +1901,37 @@ RandomCrop(32,4) + HorizontalFlip、Normalize、模型定义、seed 42。
 **状态：未执行。登记在案，留给后续。**
 （这是本项目里目前唯一一个"约一小时成本、可能买到一条新规律"的候选。）
 
+---
+
+#### §13.12 预登记（第六阶段 P0，跑前写死）
+
+**命令**（同脚本、同 seed 参数、只换种子）：
+`task2_nat.py --mode scratch --dataset cifar100 --model simple_cnn --epochs 120 --seed 43 --num_workers 0 --tag _s43`
+
+**代码改动（跑前完成）**：`task2_nat.py` 新增 `--tag` 参数，默认空串 = **原行为逐字不变**。
+加它的原因是该脚本的产物路径（`checkpoints_cifar100/nat_scratch_simplecnn/`、
+`outputs_cifar100/task2_simplecnn/scratch/`）**不含 seed**，不加 tag 跑 seed 43 会直接覆盖 s42 的产物。
+（与 `v3_methods_simplecnn.py`、`v5_full_recipe.py` 已有的 `--tag` 惯例一致。）
+
+**判据（跑后不改）**：
+
+| 尾部 $\alpha=+0.3$ 落点 | 判决 | 下一步 |
+|---|---|---|
+| **21 ± 2** | **粒度解释成立** | 立即补 seed 44；两 seed 都落在 21±2 → 升为**"提示性成立"（仍不许写成定论）**；两 seed 分歧 → 记"偶然"，假说关闭 |
+| **26 ± 2** | **s42 是偶然** | **假说关闭，本节标"已否证"** |
+| **23 ~ 24** | 两边不靠 | 补 seed 44，按多数侧判 |
+
+（s42 的两个读数：`task2_nat.py` 给 21.41，`v3_methods --mode plain` 给 26.03。判据区间以 21 和 26 为中心。）
+
+**若成立的后续（有界复查，总计 ≤4 次训练、≤4 小时，超出即停下报告）**：
+1. 枚举论文与报告中所有来自 `task2_nat.py` 的数字（NAT-scratch / NAT-finetune / §12.9 引用的 21.41 / §12.11）；
+2. 逐个判断哪些**结论的表述**依赖它；
+3. **只重跑"结论直接依赖"的**（优先级最高：mp-NAT 基线行 —— 部署表引用了它）；
+4. 每个受影响的数字在论文里加注 **"granularity=shared 口径"**。
+
+**红线**：eval 语义不动（全量测试集 + best 权重 + 7 点扫描 + α=0 行 = `metrics.best_test_acc`）；
+训练严格串行；产物零覆盖。
+
 ## 10. 方法论旗标（更新版）
 
 | # | 旗标 | 状态 | 本阶段处置 |

@@ -661,6 +661,12 @@ def parse_args():
     )
     parser.add_argument("--patience", type=int, default=None, help="早停 patience（None 不启用)")
 
+    parser.add_argument(
+        "--tag", type=str, default="",
+        help="产物目录后缀（第六阶段 P0 新增）。默认空 = 原行为不变；"
+             "跑多种子时用 --tag _s43 之类避免覆盖既有产物。"
+    )
+
     return parser.parse_args()
 
 
@@ -695,11 +701,11 @@ def main():
     # 目录：根据 mode 创建子目录，自动包含模型名（simple_cnn → simplecnn，与目录重命名对齐）
     mode_tag = "finetune" if args.mode == "finetune" else "scratch"
     model_tag = args.model.replace("_", "")
-    save_dir_checkpoint = os.path.join(get_ckpt_root(args.dataset), f"nat_{args.mode}_{model_tag}")
+    save_dir_checkpoint = os.path.join(get_ckpt_root(args.dataset), f"nat_{args.mode}_{model_tag}{args.tag}")
     if args.output_dir is not None:
         save_dir_output = args.output_dir
     else:
-        save_dir_output = os.path.join(get_outputs_root(args.dataset), f"task2_{model_tag}", args.mode)
+        save_dir_output = os.path.join(get_outputs_root(args.dataset), f"task2_{model_tag}", args.mode + args.tag)
     os.makedirs(save_dir_checkpoint, exist_ok=True)
     os.makedirs(save_dir_output, exist_ok=True)
 
