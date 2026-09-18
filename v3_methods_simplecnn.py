@@ -164,6 +164,9 @@ class SimpleCNNMaxPoolVariant(SimpleCNNMaxPool):
 
 
 def build_arch(name, nc):
+    if name == "vgg11":                       # 第六阶段 P4c：跨架构粒度对照用
+        from models.vgg11 import VGG11
+        return VGG11(num_classes=nc)
     if name == "simple_cnn_mp":
         return SimpleCNNMaxPool(num_classes=nc)
     if name == "simple_cnn_mp_avg":
@@ -410,7 +413,7 @@ def main():
                     choices=["budget", "adv", "curriculum", "joint", "range", "gauss",
                              "plain", "clean"])
     ap.add_argument("--arch", default="simple_cnn",
-                    choices=["simple_cnn", "simple_cnn_mp", "simple_cnn_mp_avg", "simple_cnn_mp_top2"],
+                    choices=["simple_cnn", "vgg11", "simple_cnn_mp", "simple_cnn_mp_avg", "simple_cnn_mp_top2"],
                     help="主干架构；simple_cnn_mp = MaxPool 密度 2→5（P1-5 用）")
     ap.add_argument("--profile", default="uniform", choices=["uniform", "front", "rear", "sens"])
     ap.add_argument("--dataset", default="cifar100")
