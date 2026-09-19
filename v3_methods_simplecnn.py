@@ -359,7 +359,14 @@ def train(args, model, train_loader, test_loader, device, names):
                 elif args.mode == "gauss":
                     amap = None  # 纯高斯训练（无 α 注入），用于 2×2 设计的 σ-only 格
                 else:  # joint / plain
-                    amap = {n: random.uniform(-0.3, 0.3) for n in names}
+                    # 消耗数开关（第六阶段 P4f）：alpha_consume=1 → 每 batch 只抽 1 个随机数
+                    # （语义上等于"全层共享一个 α"）；=5 → 现状（逐层各抽一个）。
+                    # 默认 5 时本分支与改造前逐字等价。
+                    ndraw = 1 if args.alpha_consume == 1 else len(names)
+                    amap = {n: random.uniform(-0.3, 0.3) for n in names[:ndraw]}
+                    if ndraw < len(names):
+                        a0 = next(iter(amap.values()))
+                        amap = {n: a0 for n in names}
                 # 粒度开关（第六阶段 P4a）：shared = 全层共用一个 α。
                 # 实现上取"第一个抽到的值"广播给所有层 —— 与 per-layer 消耗同样多的随机数，
                 # 所以默认路径（per-layer）的 RNG 流逐位不变，本分支根本不会执行。
@@ -431,6 +438,9 @@ def main():
                     choices=["per-layer", "shared"],
                     help="α 采样粒度（第六阶段 P4a 新增）。per-layer=逐层独立（默认，原行为）；"
                          "shared=每 batch 采一个 α 共享全层。默认值下新增代码不执行。")
+    ap.add_argument("--alpha-consume", type=int, default=5, choices=[1, 5],
+                    help="每 batch 消耗的随机数个数（第六阶段 P4f）。5=现状（逐层各抽一个）；"
+                         "1=只抽一个并广播全层。默认 5，改造前行为逐字不变。")
     ap.add_argument("--tag", default="")
     ap.add_argument("--num_workers", type=int, default=0,
                     help="DataLoader 工作进程数（内存受限时保持 0）")
