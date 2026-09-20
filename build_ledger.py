@@ -11,6 +11,10 @@
   drop_at_0.3  = clean − acc(+0.3)
   mid_band_mean= mean(acc @ α ∈ {-0.2,-0.1,+0.1,+0.2})
   pairing_check= |csv α=0 − 同 run metrics.best_test_acc|（无 metrics 记 n/a）
+
+冒烟过滤（归档轮裁决，2026-09-20）：
+  epochs==1 或 run_id 含 "smoke" 的行是冒烟验证跑，不是实验 → 不进口径。
+  产物留盘不动，只是不计入行数与配对统计。
 """
 import csv
 import json
@@ -294,6 +298,12 @@ def harvest_v3(rows):
                 })
 
 
+def is_smoke(r):
+    """冒烟跑判断（归档轮裁决，2026-09-20）：1 epoch，或名字里含 smoke 的 run 不是实验。
+    产物留盘不动，只是不进口径。"""
+    return str(r.get("epochs", "")).strip() == "1" or "smoke" in r["run_id"].lower()
+
+
 def main():
     rows = []
     if os.path.isdir("outputs"):
@@ -302,12 +312,17 @@ def main():
         harvest_dataset(rows, "outputs_cifar100", "cifar100")
     if os.path.isdir("outputs_cifar100/v3_methods") or os.path.isdir("outputs_cifar100/v3_readout_repair"):
         harvest_v3(rows)
+    smoke = [r for r in rows if is_smoke(r)]
+    rows = [r for r in rows if not is_smoke(r)]
     with open(OUT_CSV, "w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=FIELDS)
         w.writeheader()
         for r in rows:
             w.writerow(r)
     print(f"[ledger] {len(rows)} rows -> {OUT_CSV}")
+    print(f"[ledger] 冒烟过滤 = {len(smoke)} 行（epochs==1 或 run_id 含 smoke；产物留盘不动）")
+    for r in smoke:
+        print(f"   SKIP: {r['run_id']}  (epochs={r['epochs']}, clean={r['clean']})")
     fails = [r for r in rows if isinstance(r["pairing_check"], str) and "FAIL" in r["pairing_check"]]
     print(f"[ledger] pairing FAIL = {len(fails)}")
     for r in fails:
