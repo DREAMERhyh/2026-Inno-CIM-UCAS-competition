@@ -22,11 +22,18 @@
 \setlength{\parindent}{2em}
 \linespread{1.15}
 \emergencystretch=2em
+% cleveref 中文名（否则输出英文小写 "fig. 1" / "table 1"）
+\crefname{figure}{图}{图}\Crefname{figure}{图}{图}
+\crefname{table}{表}{表}\Crefname{table}{表}{表}
+\crefname{equation}{式}{式}\Crefname{equation}{式}{式}
+% 注意：不要给 section 设中文 crefname —— 会触发 "Extra \endcsname"。
+% 章节引用一律写成「第 \ref{sec:xxx} 节」。
+
 
 \newcommand{\alphahat}{\hat{\alpha}}
 \newcommand{\dt}[2]{#1\,{\scriptstyle #2}}   % 维度标注
 
-\title{\bfseries 逐层非线性失真下神经网络精度退化的读出瓶颈与双杠杆修复}
+\title{\bfseries 逐层非线性失真下神经网络精度退化的成因\\[2pt] 读出瓶颈与双杠杆修复}
 \author{黄奕皓\\[2pt] \small 中国科学院大学 计算机科学与技术，北京\\ \small \texttt{huangyihao24@mails.ucas.ac.cn}}
 \date{}
 
@@ -151,7 +158,7 @@ $|\alpha|$ 越大失真越强，$\alpha$ 的符号决定失真的方向。
 本论文引用的 152 行数据全部通过该自检，无一行错位。
 
 \textbf{种子纪律}：凡涉及尾部指标的比较均使用 $\ge 3$ 个种子；
-单种子的尾部差值小于 3 个百分点不作为结论（理由见 \cref{sec:variance}）。
+单种子的尾部差值小于 3 个百分点不作为结论（理由见第 \ref{sec:variance} 节）。
 
 \subsection{数据集、主干与协议}
 
@@ -287,7 +294,7 @@ headroom 只有 7.00 个百分点。随机扰动与确定性系统误差在"信�
 
 \cref{tab:nat} 把两类方法并列。读出适配在三个主干上一致地超过"全网络重训"这一整类配方，
 而可训练参数只有 5.04\%/0.55\%，训练时间低 1$\sim$2 个数量级。
-代价是干净精度下降 3.19$\sim$6.67 个百分点——这一点在 \cref{sec:gating} 里被处理。
+代价是干净精度下降 3.19$\sim$6.67 个百分点——这一点在第 \ref{sec:gating} 节里被处理。
 
 一个必要的自我校验：\textbf{读出适配不是"再分配"。}
 把读出专门拟合到 $\alpha=+0.3$ 单点，该点确实从 28.09 涨到 52.79（$+24.70$），

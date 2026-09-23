@@ -22,6 +22,13 @@
 \setlength{\parindent}{2em}
 \linespread{1.15}
 \emergencystretch=2em
+% cleveref 中文名（否则输出英文小写 "fig. 1" / "table 1"）
+\crefname{figure}{图}{图}\Crefname{figure}{图}{图}
+\crefname{table}{表}{表}\Crefname{table}{表}{表}
+\crefname{equation}{式}{式}\Crefname{equation}{式}{式}
+% 注意：不要给 section 设中文 crefname —— 会触发 "Extra \endcsname"。
+% 章节引用一律写成「第 \ref{sec:xxx} 节」。
+
 
 \title{\bfseries 存算一体芯片中非线性误差对推理精度的影响研究}
 \author{黄奕皓\\[2pt] \small 中国科学院大学 计算机科学与技术，北京\\ \small \texttt{huangyihao24@mails.ucas.ac.cn}}
