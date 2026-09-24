@@ -101,9 +101,12 @@ $|\alpha|$ 越大失真越强，$\alpha$ 的符号决定失真的方向。
   \item \textbf{定位}：灾难尾（$\alpha=+0.3$）损失的是读出的\textbf{可解码性}，而不是表征中的信息。
         直接用探针测量 headroom：$\alpha=+0.3$ 时为 20.12 个百分点，
         且随失真增强单调放大（$+0.4$ 时 30.41、$+0.5$ 时 30.38）。
-  \item \textbf{修复}：据此得到的读出适配方法（冻结主干、只重训线性读出）在三个主干上
-        把尾部提升 13$\sim$23 个百分点，成本低 1$\sim$2 个数量级，
-        首次在尾部超过了全网络鲁棒训练这一整类配方。
+  \item \textbf{修复}：据此得到的读出适配方法（冻结主干、只重训线性读出——即迁移学习中的
+        linear probing 一族）在三个主干上把尾部提升 13$\sim$23 个百分点，成本低 1$\sim$2 个数量级。
+        \textbf{该做法本身不是本文的贡献}：当预训练特征好、偏移大时线性探针可胜过全量微调，
+        这是已有理论与十数据集实证的结论（见第 \ref{sec:related} 节）。
+        \textbf{本文的贡献是给出它在本场景下的上界、机制与边界}，
+        并指出在主干物理不可重训的约束下，它是唯一可行的一类修复。
         与之对照，训练端的四条独立路径全部失败，其中"把训练范围扩到 $\pm0.5$"这条
         最能说明问题的性质：模型在 $\alpha=+0.5$ 上仍只有 2.71\%，
         而同期负侧有 31.19\%。
@@ -120,6 +123,7 @@ $|\alpha|$ 越大失真越强，$\alpha$ 的符号决定失真的方向。
 第 \ref{sec:discussion} 节综合讨论；第 \ref{sec:limit} 节给出局限与未来工作。
 
 \subsection{相关工作}
+\label{sec:related}
 
 非线性感知训练（NAT）把失真注入训练过程，让网络在失真分布内学习，
 是在此之前的范式~\cite{nat}。本文的结果表明该类方法的收益严格限定在训练分布之内，
@@ -131,6 +135,35 @@ $|\alpha|$ 越大失真越强，$\alpha$ 的符号决定失真的方向。
 
 架构层面，残差连接~\cite{resnet} 与深度可分离的深层纯前馈结构~\cite{vgg}
 在本文的扰动下表现出显著不同的脆弱性；数据集为 CIFAR~\cite{cifar}。
+
+\textbf{与本文方法最接近的一条已有结论。}
+「冻结主干、只重训最后的线性层」（linear probing）与全量微调的对比，
+在迁移学习里是一条有理论与大规模实证支撑的已知结论：
+当预训练特征足够好、且分布偏移足够大时，\textbf{线性探针的分布外精度反而高于全量微调}
+（在 10 个偏移数据集上平均 \textbf{ID 高 2\%、OOD 低 7\%}），原因是微调在学头的同时
+\textbf{扭曲了底层特征}（feature distortion）~\cite{lpft}。
+本文的读出适配属于同一族做法。\textbf{本文的贡献不在于此规律本身}，而在于：
+① 把它搬到一个新场景——失真是确定性的、逐层累积的输入侧系统误差，
+而非统计意义上的分布偏移；② 在该场景下主干\textbf{物理上不可重训}，故读出适配不是"更优选择"而是唯一选择；
+③ 给出该场景特有的\textbf{上界}（探针 headroom 与可恢复量）、\textbf{机制}（有效秩塌陷）
+与\textbf{边界}（门控的两前提）。
+
+\textbf{与 CIM 数字域补偿的关系。}
+在存内计算领域，「冻结阵列、只在数字域补偿」已有先例，但形态是\textbf{标量或查找表级}的校正：
+例如用器件特定的电导漂移查找表配合自适应量化，在\textbf{不做片上训练}的前提下达到软件基线精度~\cite{mtjcal}。
+本文动的对象不同——不是调一个缩放因子，而是\textbf{重训整个线性读出层}。
+代价相应更大：它要求读出层位于数字域或可重写（见第 \ref{sec:limit} 节）。
+换言之，已有工作回答的是"能不能用数字域的便宜手段把阵列误差压下去"，
+本文回答的是"误差到底损伤了哪一层、损伤了多少、以及修复的边界在哪"。
+
+\textbf{关于本文最依赖的测量手段。}
+本文的中心结论建立在线性探针的读数上。这一手段近年正受到系统质疑：
+\textbf{探针精度饱和并不意味着信息在场，探针失灵也不意味着信息不在场}——
+已有工作报告过探针精度 0.871、有效秩指标全部健康的表征，
+在检索任务上却只恢复了 14.4 bit 中的 \textbf{0.00} bit，
+作者因此警告「秩、探针与其他指标都可能在无支撑的评测上虚假饱和」~\cite{gjepa}。
+本文对此的处理是\textbf{主动加固}：为探针读数配第二读法（激活噪声下的临界崩塌点）与多组对照，
+详见第 \ref{sec:probe} 节与第七阶段的审计记录。
 
 \section{方法}
 \label{sec:method}
@@ -235,6 +268,7 @@ VGG-11 从 67.09 掉到 16.92，ResNet-18 从 72.09 掉到 2.70。
 跨阶段稳定成立的只有\textbf{方向}。
 
 \subsection{灾难尾丢的不是信息，而是读出的可解码性}
+\label{sec:probe}
 
 这是全文的枢纽。若正侧尾部是表征被摧毁，那么任何修复都必须改动主干；
 若信息仍在、只是读不出来，则杠杆在读出侧。
@@ -767,6 +801,9 @@ Dithering 增益（C100 / C10） & $+2.84$ / $+6.53$ & \texttt{extension5\_dithe
 \bibitem{resnet} He K, Zhang X, Ren S, et al. Deep residual learning for image recognition[C]//CVPR. Las Vegas: IEEE, 2016: 770--778.
 \bibitem{vgg} Simonyan K, Zisserman A. Very deep convolutional networks for large-scale image recognition[C]//ICLR. San Diego: ICLR, 2015: 1--14.
 \bibitem{cifar} Krizhevsky A. Learning multiple layers of features from tiny images[R]. Toronto: University of Toronto, 2009.
+\bibitem{lpft} Kumar A, Raghunathan A, Jones R, et al. Fine-tuning can distort pretrained features and underperform out-of-distribution[C]//International Conference on Learning Representations. 2022. arXiv:2202.10054.
+\bibitem{mtjcal} Xiao Z, Naik V B, Lim J H, et al. Adapting magnetoresistive memory devices for accurate and on-chip-training-free in-memory computing[J]. Science Advances, 2024, 10(38): eadp3710.
+\bibitem{gjepa} Rabby G, Auer S. When Graph-JEPA learns the wrong thing: diagnosing and repairing category-conditional collapse[R]. 2026. arXiv:2608.20516.
 \end{thebibliography}
 
 \end{document}
