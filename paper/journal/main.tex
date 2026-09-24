@@ -60,7 +60,7 @@ $\alpha=+0.3$ 时可达 48.35\%，而模型自带分类头只有 28.09\%，headr
 在最严口径下仍存活（$+16.23$，为规范口径的八成）；
 它是\textbf{下界}——把探针样本加到 50000 后升至 $+27.63$（按不相交校正约 $+25.4$），且仍未饱和。
 用三种非线性读出（k-NN 与两种 MLP）替换线性头，\textbf{没有一个能超过它}——容量不是这里的瓶颈。
-\textbf{第二，因此最省力的修复动作在读出侧。}
+\textbf{第二，诊断的推论：既然瓶颈在解码，那么在投片后唯一可行的修复落在读出侧。}
 冻结全部主干权重、只重训最后一个线性层（训练成本 12$\sim$30 分钟，为主干重训的 1/5$\sim$1/16），
 尾部精度从 28.09/15.98/6.22 提升到 43.31/47.79/26.82（三个主干，各 3 个种子），
 一致超过所有全网络鲁棒训练配方；而训练端的四条补救路径（采样预算分配、$\alpha$ 空间对抗训练、
@@ -165,8 +165,12 @@ $|\alpha|$ 越大失真越强，$\alpha$ 的符号决定失真的方向。
 \subsection{相关工作}
 \label{sec:related}
 
-非线性感知训练（NAT）把失真注入训练过程，让网络在失真分布内学习，
-是在此之前的范式~\cite{nat}。本文的结果表明该类方法的收益严格限定在训练分布之内，
+非线性感知训练此前已有工作（如 NEAT~\cite{neat}）：
+它通过\textbf{约束权重范围}使器件工作在晶体管的线性区，从而\textbf{规避}模拟域的非线性。
+本文的场景不同——这里的失真\textbf{无法由权重约束规避}：它由模拟域算子的非线性
+在\textbf{每一层输入端}产生，与权重值无关。因此本文的问题不是"如何避免进入失真区"，
+而是"\textbf{在失真区内，可解码性还剩多少、能从读出侧拿回多少}"。
+就本文测过的\textbf{训练端}路径而言，其收益严格限定在训练分布之内，
 且不触及本文关心的正侧尾部（\cref{fig:extrapolation}）。
 
 量化是 CiM 的另一条主要误差通路~\cite{quant}。本文考察了失真与量化联合作用的场景，
@@ -1593,7 +1597,7 @@ SimpleCNN（2 MaxPool） & --- & $-13.68$ & $-14.71$ \\
 \begin{thebibliography}{99}
 \bibitem{cim_survey} Yu S, Chen P Y. Emerging memory technologies: recent trends and prospects[J]. IEEE Solid-State Circuits Magazine, 2016, 8(2): 43--56.
 \bibitem{puma} Ankit A, El Hajj I, Chalamalasetti S R, et al. PUMA: a programmable ultra-efficient memristor-based accelerator for machine learning inference[C]//ASPLOS. Providence: ACM, 2019: 715--731.
-\bibitem{nat} Zhu M, Liu Y, Wang Z, et al. Nonlinearity-aware training for accurate and robust compute-in-memory neural networks[J]. IEEE TCAD, 2022, 41(11): 3961--3973.
+\bibitem{neat} Bhattacharjee A, Bhatnagar L, Kim Y, et al. NEAT: nonlinearity aware training for accurate, energy-efficient, and robust implementation of neural networks on 1T-1R crossbars[J]. IEEE TCAD, 2022, 41(8): 2625--2637.
 \bibitem{quant} Jacob B, Kligys S, Chen B, et al. Quantization and training of neural networks for efficient integer-arithmetic-only inference[C]//CVPR. Salt Lake City: IEEE, 2018: 2704--2713.
 \bibitem{dither} Wannamaker R A, Lipshitz S P, Vanderkooy J, et al. A theory of nonsubtractive dither[J]. IEEE Transactions on Signal Processing, 2000, 48(2): 499--516.
 \bibitem{resnet} He K, Zhang X, Ren S, et al. Deep residual learning for image recognition[C]//CVPR. Las Vegas: IEEE, 2016: 770--778.
