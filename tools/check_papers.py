@@ -18,6 +18,9 @@ import re
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from static_tex_check import run as static_run  # noqa: E402
+
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 PAPERS = ["journal", "technical-report", "competition"]
 TEXBIN = "/d/texlive/2025/bin/windows"
@@ -78,6 +81,21 @@ def main():
             continue
         print(f"\n[{name}]")
         probs = check_source(tex)
+        # 扩展静态检查（不编译）：引用/引文/环境配平/花括号/行内 $ 闭合。
+        # **放在编译之前**：像"多一个 $"这种错会让整份稿编译不过，
+        # 而它本该在编译前就被拦下（2026-09-24 实际漏检过一次，见 tools/static_tex_check.py 的说明）
+        serr, swarn = static_run(tex)
+        n_serr = sum(len(m) for _, m in serr)
+        n_swarn = sum(len(m) for _, m in swarn)
+        if n_serr:
+            print(f"  ✗ 静态检查（不编译）：{n_serr} 处")
+            for cname, msgs in serr:
+                for m in msgs:
+                    print(f"    [{cname}] {m}")
+            bad += 1
+        else:
+            print(f"  ✓ 静态检查（不编译）：引用 / 引文 / 环境配平 / 花括号 / 行内 $ 全部通过"
+                  + (f"（{n_swarn} 条提示）" if n_swarn else ""))
         pages, errs, undef = compile_paper(name)
         if probs:
             print(f"  ✗ 源码静态检查：{len(probs)} 处 markdown 残留")
