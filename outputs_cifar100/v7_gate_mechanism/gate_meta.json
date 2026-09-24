@@ -1,0 +1,180 @@
+{
+  "script": "v7_gate_mechanism.py",
+  "argv": [
+    "v7_gate_mechanism.py"
+  ],
+  "device": "cpu",
+  "arch": "simple_cnn_mp",
+  "seeds": [
+    42,
+    43,
+    44
+  ],
+  "grid": [
+    0.0,
+    0.05,
+    -0.05,
+    0.1,
+    -0.1,
+    0.15,
+    -0.15,
+    0.2,
+    -0.2,
+    0.25,
+    -0.25,
+    0.3,
+    -0.3
+  ],
+  "eval": [
+    -0.3,
+    -0.2,
+    -0.1,
+    0.0,
+    0.1,
+    0.2,
+    0.3
+  ],
+  "n_train": 20000,
+  "n_test": 10000,
+  "reproduction": "import v5_full_recipe 复用 build_arch/make_loaders/extract/train_head",
+  "wording": "鲁棒头未存盘、需重训；train_head 由 manual_seed 完全确定 ⇒ 同 seed 确定性复现，非重新实验",
+  "optimization": "训练特征 seed 无关 ⇒ 每数据集只提一次供 3 seed 复用；已由自检②③逐位核验",
+  "selfcheck_amended_2026_09_24": {
+    "note": "自检① 经 claude-e9 批准放宽（台账 §16.7 修订）：C10 计数的最小裕度仅 0.0100 pp，设备差异单独即可翻转它；C100 裕度 0.16 pp 稳健。放宽的代价是必须给出替代证据（条件 A）——不是『放宽了事』。",
+    "reproduced_counts": {
+      "cifar100": 3,
+      "cifar10": 2
+    },
+    "accepted_range": {
+      "cifar100": [
+        3
+      ],
+      "cifar10": [
+        1,
+        2
+      ]
+    },
+    "per_alpha_soft_minus_oracle_pp": {
+      "cifar100": {
+        "-0.3": 0.56,
+        "-0.2": -0.1567,
+        "-0.1": -0.3533,
+        "+0.0": -0.3333,
+        "+0.1": -0.53,
+        "+0.2": 1.07,
+        "+0.3": 0.4967
+      },
+      "cifar10": {
+        "-0.3": -0.2533,
+        "-0.2": 0.0033,
+        "-0.1": -0.1667,
+        "+0.0": -0.08,
+        "+0.1": 0.3567,
+        "+0.2": -0.0333,
+        "+0.3": -0.3533
+      }
+    },
+    "gains_pp": {
+      "cifar100": {
+        "max_gain": 1.07,
+        "min_margin_abs": 0.1567,
+        "max_gain_at": "+0.2"
+      },
+      "cifar10": {
+        "max_gain": 0.3567,
+        "min_margin_abs": 0.0033,
+        "max_gain_at": "+0.1"
+      }
+    },
+    "replacement_fidelity_evidence": {
+      "why": "计数门被放宽，故用下列四条独立证据替代它作为忠实性依据",
+      "1_extract_bitwise_and_state": {
+        "cifar100": true,
+        "cifar10": true
+      },
+      "2_train_head_no_mutation": {
+        "cifar100": true,
+        "cifar10": true
+      },
+      "3_ridge_R2": {
+        "cifar100": 0.8323,
+        "cifar10": 0.827
+      },
+      "4_vs_cuda_recipe": {
+        "cifar100": {
+          "available": true,
+          "path": "./outputs_cifar100\\v5_full_recipe\\recipe_simple_cnn_mp.csv",
+          "n_cells": 21,
+          "per_quantity": {
+            "acc_clean": {
+              "max_abs_diff": 0.04,
+              "mean_abs_diff": 0.0114
+            },
+            "acc_robust": {
+              "max_abs_diff": 0.06,
+              "mean_abs_diff": 0.0186
+            },
+            "acc_soft": {
+              "max_abs_diff": 0.05,
+              "mean_abs_diff": 0.0124
+            }
+          },
+          "signed_diff_acc_clean": {
+            "min": -0.01,
+            "max": 0.04,
+            "note": "acc_clean 与 seed 无关（= 主干 fc 权重）⇒ 其非零差只能来自数值差异"
+          }
+        },
+        "cifar10": {
+          "available": true,
+          "path": "./outputs\\v5_full_recipe\\recipe_simple_cnn_mp.csv",
+          "n_cells": 21,
+          "per_quantity": {
+            "acc_clean": {
+              "max_abs_diff": 0.02,
+              "mean_abs_diff": 0.01
+            },
+            "acc_robust": {
+              "max_abs_diff": 0.02,
+              "mean_abs_diff": 0.0038
+            },
+            "acc_soft": {
+              "max_abs_diff": 0.02,
+              "mean_abs_diff": 0.0052
+            }
+          },
+          "signed_diff_acc_clean": {
+            "min": -0.02,
+            "max": 0.01,
+            "note": "acc_clean 与 seed 无关（= 主干 fc 权重）⇒ 其非零差只能来自数值差异"
+          }
+        }
+      }
+    }
+  },
+  "reporting_rule_condition_B": "报数一律用幅度、不用计数；「3/7 vs 1/7」不稳健，不准再用",
+  "cross_dataset_medians": {
+    "cifar100": {
+      "soft_minus_oracle": -0.15666666666666668,
+      "df_ratio": 1.7741333333333333,
+      "err_phi": 0.6744,
+      "double_fault": 0.3845
+    },
+    "cifar10": {
+      "soft_minus_oracle": -0.08,
+      "df_ratio": 5.284933333333333,
+      "err_phi": 0.7813,
+      "double_fault": 0.1176
+    }
+  },
+  "deltas": {
+    "phi": -0.1069,
+    "df_ratio": -3.5107999999999997,
+    "soft_minus_oracle": -0.07666666666666667
+  },
+  "decimals": 4,
+  "verdict_branch": "③",
+  "verdict_detail": "不分离：Δphi=-0.1069 Δdf_ratio=-3.5108 Δ(soft−oracle)=-0.0767；C100 最大增益 +1.07pp vs C10 最大 +0.36pp ⇒ 不恢复主张",
+  "scope_note": "不修改 §13.3b/§13.7 任何既有判决；即使判①恢复的也只是有条件的主张",
+  "git_commit": "d258fe1873ec6e1af54539c919604c4ccaad357d"
+}

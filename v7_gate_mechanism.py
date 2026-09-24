@@ -37,7 +37,10 @@ ARCH = "simple_cnn_mp"
 SELFCHECK_ALPHAS = (0.0, 0.3)     # 自检 ② 抽样
 OUT_DIRNAME = "v7_gate_mechanism"
 ND = 4
-EXPECT_COUNT = {"cifar100": 3, "cifar10": 1}
+# 自检① 经 claude-e9 批准放宽（台账 §16.7 修订，2026-09-24）：
+#   C100 的计数有 0.16pp 裕度（稳健）；C10 的最小裕度只有 0.0100pp（α=-0.2），设备差异单独即可翻转。
+#   故 C10 接受 {1,2}，但**必须**用下方 fidelity 证据替代被放宽的那个门（条件 A）。
+EXPECT_COUNT = {"cifar100": (3,), "cifar10": (1, 2)}
 
 
 def log(*a) -> None:
@@ -71,6 +74,43 @@ def selfcheck_train_head_mutation(Xtr, Ytr, nc) -> bool:
     same = np.array_equal(X0, Xtr)
     log(f"[16.7] 自检③ train_head 未修改输入特征 = {same}")
     return bool(same)
+
+
+def fidelity_vs_old_recipe(ds_name: str, rows: List[dict]) -> dict:
+    """条件 A 的忠实性证据：与既有 CUDA recipe CSV 逐 seed 逐 α 比对。
+
+    注意：既有 recipe 是 CUDA 产物，本轮按 0 GPU 走 CPU，故差异非零，
+    关键看**差异量级**与**是否只落在确定性量上**。
+    """
+    old_path = os.path.join(get_outputs_root(ds_name), "v5_full_recipe",
+                            f"recipe_{ARCH}.csv")
+    if not os.path.exists(old_path):
+        return {"available": False, "path": old_path}
+    with open(old_path, encoding="utf-8") as fh:
+        old = {(int(r["seed"]), float(r["alpha"])): r for r in csv.DictReader(fh)}
+    pairs = [("acc_clean", "acc_clean_head"), ("acc_robust", "acc_robust_head"),
+             ("acc_soft", "acc_softgate")]
+    out = {"available": True, "path": old_path, "n_cells": 0, "per_quantity": {}}
+    acc = {k: [] for k, _ in pairs}
+    signed_clean = []
+    for r in rows:
+        o = old.get((r["seed"], r["alpha"]))
+        if o is None:
+            continue
+        out["n_cells"] += 1
+        for k, ocol in pairs:
+            acc[k].append(abs(r[k] - float(o[ocol])))
+        signed_clean.append(r["acc_clean"] - float(o["acc_clean_head"]))
+    for k, _ in pairs:
+        v = acc[k]
+        out["per_quantity"][k] = {"max_abs_diff": round(float(max(v)), 4),
+                                  "mean_abs_diff": round(float(np.mean(v)), 4)}
+    out["signed_diff_acc_clean"] = {"min": round(float(min(signed_clean)), 4),
+                                    "max": round(float(max(signed_clean)), 4),
+                                    "note": "acc_clean 与 seed 无关（= 主干 fc 权重）⇒ 其非零差只能来自数值差异"}
+    log(f"[16.7] {ds_name} 忠实性比对（vs CUDA recipe，{out['n_cells']} 格）："
+        + " ".join(f"{k} max|Δ|={v['max_abs_diff']:.4f}" for k, v in out["per_quantity"].items()))
+    return out
 
 
 def run_dataset(ds_name: str, out_dir: str) -> Tuple[List[dict], dict]:
@@ -164,6 +204,8 @@ def run_dataset(ds_name: str, out_dir: str) -> Tuple[List[dict], dict]:
 
     return rows, {"selfcheck_extract": ok_ex, "selfcheck_state": ok_st,
                   "selfcheck_no_mutation": ok_mut, "selfcheck_extract_rows": sc2,
+                  "ridge_R2": round(float(ridge.score(Ztr, Atr)), 4),
+                  "fidelity_vs_cuda_recipe": fidelity_vs_old_recipe(ds_name, rows),
                   "ckpt": ck, "persample": persample}
 
 
@@ -184,18 +226,23 @@ def main() -> None:
         log(f"[16.7] {ds}: 逐样本预测已存")
 
     # ---- 自检①：复现 3/7 与 1/7 ----
-    counts = {}
+    counts, margins, gains = {}, {}, {}
     for ds in DATASETS:
         rs = [r for r in all_rows if r["dataset"] == ds]
-        n_beat = 0
+        per_alpha = {}
         for a in EVAL:
             sub = [r for r in rs if abs(r["alpha"] - a) < 1e-9]
-            if np.mean([r["acc_soft"] for r in sub]) > np.mean([r["oracle"] for r in sub]):
-                n_beat += 1
-        counts[ds] = n_beat
-        log(f"[16.7] 自检① {ds}: soft>oracle 的 α 数 = {n_beat}/7（预期 {EXPECT_COUNT[ds]}）")
+            per_alpha[a] = float(np.mean([r["soft_minus_oracle"] for r in sub]))
+        counts[ds] = sum(1 for a in EVAL if per_alpha[a] > 0)
+        margins[ds] = {f"{a:+.1f}": round(per_alpha[a], ND) for a in EVAL}
+        gains[ds] = {"max_gain": round(max(per_alpha.values()), ND),
+                     "min_margin_abs": round(min(abs(v) for v in per_alpha.values()), ND),
+                     "max_gain_at": f"{max(per_alpha, key=per_alpha.get):+.1f}"}
+        log(f"[16.7] 自检① {ds}: soft>oracle = {counts[ds]}/7（接受 {EXPECT_COUNT[ds]}）；"
+            f"最大增益 {gains[ds]['max_gain']:+.2f}pp @ {gains[ds]['max_gain_at']}；"
+            f"最小裕度 {gains[ds]['min_margin_abs']:.4f}pp")
 
-    ok1 = all(counts[ds] == EXPECT_COUNT[ds] for ds in DATASETS)
+    ok1 = all(counts[ds] in EXPECT_COUNT[ds] for ds in DATASETS)
     ok2 = all(meta[ds]["selfcheck_extract"] and meta[ds]["selfcheck_state"] for ds in DATASETS)
     ok3 = all(meta[ds]["selfcheck_no_mutation"] for ds in DATASETS)
     log(f"[16.7] 自检汇总: ①复现计数={ok1}  ②抽取逐位={ok2}  ③不复用污染={ok3}")
@@ -221,14 +268,19 @@ def main() -> None:
     d_soft = summ["cifar100"]["soft_minus_oracle"] - summ["cifar10"]["soft_minus_oracle"]
     consistent = (d_phi < 0) and (d_dfr < 0) and (d_soft > 0)
     opposite = ((d_phi > 0) and (d_dfr > 0) and (d_soft < 0))
+    # 条件 B：报数用幅度（max_gain），不用计数
+    mag = (f"C100 最大增益 {gains['cifar100']['max_gain']:+.2f}pp vs "
+           f"C10 最大 {gains['cifar10']['max_gain']:+.2f}pp")
     if consistent:
         br, detail = "①", (f"C100 的 phi 更负({d_phi:+.4f})、df_ratio 更小({d_dfr:+.4f})、"
-                           f"soft−oracle 更高({d_soft:+.4f}) ⇒ 机制成立，有条件恢复「插值即集成」")
+                           f"soft−oracle 更高({d_soft:+.4f})；{mag} "
+                           f"⇒ 机制成立，有条件恢复「插值即集成」")
     elif opposite:
-        br, detail = "②", f"三项方向与机制预测相反 ⇒ 机制不成立，永久关闭「插值即集成」"
+        br, detail = "②", (f"三项方向与机制预测相反；{mag} "
+                           f"⇒ 机制不成立，永久关闭「插值即集成」")
     else:
         br, detail = "③", (f"不分离：Δphi={d_phi:+.4f} Δdf_ratio={d_dfr:+.4f} "
-                           f"Δ(soft−oracle)={d_soft:+.4f} ⇒ 不恢复主张")
+                           f"Δ(soft−oracle)={d_soft:+.4f}；{mag} ⇒ 不恢复主张")
     log(f"[16.7] 判决：分支 {br} —— {detail}")
 
     with open(os.path.join(out_dir, "gate_errors.csv"), "w", newline="",
@@ -242,8 +294,27 @@ def main() -> None:
                    "reproduction": "import v5_full_recipe 复用 build_arch/make_loaders/extract/train_head",
                    "wording": "鲁棒头未存盘、需重训；train_head 由 manual_seed 完全确定 ⇒ 同 seed 确定性复现，非重新实验",
                    "optimization": "训练特征 seed 无关 ⇒ 每数据集只提一次供 3 seed 复用；已由自检②③逐位核验",
-                   "selfcheck": {"reproduced_counts": counts, "expect": EXPECT_COUNT,
-                                 "extract_bitwise": meta, "all_pass": True},
+                   "selfcheck_amended_2026_09_24": {
+                       "note": "自检① 经 claude-e9 批准放宽（台账 §16.7 修订）：C10 计数的最小裕度仅 "
+                               "0.0100 pp，设备差异单独即可翻转它；C100 裕度 0.16 pp 稳健。"
+                               "放宽的代价是必须给出替代证据（条件 A）——不是『放宽了事』。",
+                       "reproduced_counts": counts,
+                       "accepted_range": {k: list(v) for k, v in EXPECT_COUNT.items()},
+                       "per_alpha_soft_minus_oracle_pp": margins,
+                       "gains_pp": gains,
+                       "replacement_fidelity_evidence": {
+                           "why": "计数门被放宽，故用下列四条独立证据替代它作为忠实性依据",
+                           "1_extract_bitwise_and_state": {
+                               ds: bool(meta[ds]["selfcheck_extract"] and meta[ds]["selfcheck_state"])
+                               for ds in DATASETS},
+                           "2_train_head_no_mutation": {
+                               ds: bool(meta[ds]["selfcheck_no_mutation"]) for ds in DATASETS},
+                           "3_ridge_R2": {ds: meta[ds]["ridge_R2"] for ds in DATASETS},
+                           "4_vs_cuda_recipe": {ds: meta[ds]["fidelity_vs_cuda_recipe"]
+                                                for ds in DATASETS},
+                       },
+                   },
+                   "reporting_rule_condition_B": "报数一律用幅度、不用计数；「3/7 vs 1/7」不稳健，不准再用",
                    "cross_dataset_medians": summ,
                    "deltas": {"phi": d_phi, "df_ratio": d_dfr, "soft_minus_oracle": d_soft},
                    "decimals": ND, "verdict_branch": br, "verdict_detail": detail,
