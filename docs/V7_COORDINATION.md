@@ -172,6 +172,45 @@ claude --bg --allowedTools="Bash,Read,Write,Edit,Glob,Grep" "<简报>"
 | **M4 的实际耗时比初估长** | VGG-11/Exp2 120ep 实测 **110 分钟/次**（初估按冒烟的 52s/epoch 外推为 ~60 分钟；实际稳态变慢）。4 次串行 ⇒ 总时长按 ~9 小时估更稳 | 排期按实测值，不要按冒烟外推 |
 | **新产物不会自动进台账** | `build_ledger.py` 的 ext6 收割读的是固定的 `alpha_wide_scan_deep_robust.csv` 与 `{model}/metrics.json`，**不 glob 带 `_s43` 后缀的目录** | 汇总台账时需扩展收割器或手工补行（记在 §六） |
 | **`\` 在 Python heredoc 里会被吞** | 用 heredoc 批量改写 `.tex`/正则时，`\t` `\b` 会被解释成控制字符（本项目实际踩过一次，写坏了标题行） | **不要用字符串替换脚本批量改 LaTeX 源文件**；要改就用编辑工具逐处改 |
+| 🔴 **`run_in_background` 的任务不跨会话存活** | **已出过一次事故**：上一个会话上下文占满被杀时，把当时跑到 2/4 的 M4 训练链一起带走了（见 `docs/HANDOFF.md` §2）。原因是后台 Bash 作业**是那个会话进程的子进程**，会话死它就死。<br>⚠ **重启后仍用的是同一机制**（`logs_v7_m4_train_part2.log`），所以**同一个事故还会再犯一次**。 | **见下方「怎么开一个真正脱离会话的长任务」——已实测通过。**<br>短期兜底：`docs/HANDOFF.md` §2 已写"开跑前先写清楚怎么接住"，但那是**止损**不是**解药**。 |
+
+### 五·补一、怎么开一个真正脱离会话的长任务（**已实测通过**）
+
+**问题**：`run_in_background` 的 Bash 作业挂在会话进程下，会话一死任务就死。
+**我们要的是"会话死了训练还在跑"。**
+
+**实测通过的配方**（2026-09-24 验证）：
+
+1. 写一个 `.bat`（**用绝对路径**，内含 `cd /d` 到仓库）：
+
+```bat
+@echo off
+cd /d d:\deeplearning_practice\存算一体
+set PYTHONIOENCODING=utf-8
+D:\anaconda3\envs\pytorch_env\python.exe <训练脚本> <参数...>
+D:\anaconda3\envs\pytorch_env\python.exe <下一个训练脚本> <参数...>
+```
+
+2. 用 `Start-Process` 启动它：
+
+```bash
+powershell -NoProfile -Command "Start-Process -FilePath 'cmd.exe' \
+  -ArgumentList '/c','d:\deeplearning_practice\存算一体\<脚本名>.bat' -WindowStyle Hidden"
+```
+
+**两个必须知道的细节**（都实测踩过）：
+
+- ⚠ **`-ArgumentList` 里的 bat 路径必须写绝对路径**。写相对路径（即使给了 `-WorkingDirectory`）
+  **实测不执行、也不报错**——文件不生成、命令静默失败。
+- **日志要重定向到文件**（bat 里用 `>> 日志 2>&1`），否则输出无处可去。
+  注意 CMD 重定向 + Python 块缓冲 ⇒ 日志**可能要等缓冲区满才刷出来**；
+  想确认存活请看 **GPU 利用率**与**产物目录 mtime**，不要只盯日志。
+
+**验证脱离成功的方法**：启动后另起一条命令查进程——
+`Get-CimInstance Win32_Process -Filter "name='python.exe'"` 应能看到训练进程；
+**且它与当前会话不在同一进程树里**（会话结束后它仍在）。
+
+**别再做的事**：不要用 `run_in_background` 跑长训练。**它不是"后台"，是"本会话的子进程"。**
 
 ---
 
