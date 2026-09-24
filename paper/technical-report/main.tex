@@ -193,6 +193,16 @@ ResNet-18 & 11\,173\,962 / 11\,220\,132 & 17 & 0 & 有 & 残差变量 \\
 前两阶段以 CIFAR-10 为主线，对应赛题的三项任务与三项拓展，
 以及评审意见带来的三项优化。它们的完整数值见竞赛版文档，此处给出归档要点。
 
+\begin{quote}
+\small\textbf{口径注（实现归属）}：本节以及第 \ref{sec:history} 节引用的\textbf{第一、二阶段数值}
+（任务 1--3、拓展 1--6）来自 \texttt{task1} / \texttt{task2\_nat.py} / \texttt{task3\_robust.py} /
+\texttt{task\_extension*.py} 这一条实现线；而本报告其余各节（第三\textasciitilde 六阶段）的数值来自
+\texttt{v3\_methods\_simplecnn.py} / \texttt{v3\_readout\_repair.py} / \texttt{v5\_*} 等另一条实现线。
+\textbf{两条实现线之间的精度数字不可直接相减或并列比较}——它们之间存在一个稳定的实现级偏移
+（第 \ref{sec:history} 节记录为 5.55 个百分点，机制未明，按已知未知归档）。
+本节内部逐项自洽，但与后文各节之间\textbf{只作定性对照，不作定量对比}。
+\end{quote}
+
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.68\textwidth]{C01_task1_sensitivity.pdf}
