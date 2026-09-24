@@ -60,10 +60,10 @@
 核心科学结论为：在逐层三次多项式非线性失真下，网络在灾难尾（$\alpha=+0.3$）损失的
 是\textbf{读出的可解码性}而非表征中的信息（oracle-$\alpha$ 探针 headroom $+20.26$ 个百分点，
 同一探针在加性高斯噪声下仅 $+7.50$）；据此，冻结全部模拟权重、只重训最后的线性层，
-即可以约 1/5$\sim$1/30 的主干重训成本在尾部超过所有全网络鲁棒训练配方
+即可以约 1/5$\sim$1/16 的主干重训成本在尾部超过所有全网络鲁棒训练配方
 （三主干：28.09/15.98/6.22 $\to$ 43.31/47.79/26.82）；
 而训练端没有一条补救路径能改善尾部。架构端的池化密度是另一条零成本的独立杠杆
-（$+14.38$ 个百分点），其保护主要来自降维。
+（同协议同 seed 配对 $+15.52$ 个百分点），其保护主要来自降维。
 
 本报告同时记录一条方法学观察：\textbf{本文观测到}一个同超参、同种子、跨实现稳定
 \textbf{5.55} 个百分点的差异——同一份权重在两条评估路径下读数逐位相同，
@@ -105,15 +105,28 @@
 \textbf{定位说明（2026-09-24 补，详见 \texttt{docs/POSITIONING.md}）}：
 本项目的核心方法——冻结主干、只重训最后的线性层——\textbf{不是一个新方法}，
 它是迁移学习里的 linear probing；而「预训练特征好、偏移大时线性探针可胜过全量微调」
-是一条有理论与十数据集实证支撑的已知结论。
+是一条有理论与十数据集实证支撑的已知结论~\cite{lpft}。
 \textbf{本项目的贡献是}：把它搬到一个新场景（模拟域非理想性），
 并给出该场景特有的\textbf{上界}（探针 headroom 与可恢复量）、
 \textbf{机制}（有效秩塌陷、同强度下正侧 Fisher 反高于负侧）、\textbf{边界}（门控两前提 + 读出层须在数字域），
 外加一个先行工作里没有对应物的\textbf{正交架构杠杆}（池化降维）。
 在 CIM 领域，「冻结阵列 + 数字域补偿」已有先例，但形态是\textbf{标量或查找表级}校正；
 本项目动的是整个读出层，代价更大（要求读出层可重写）。
-本报告同时\textbf{主动记录}了本项目最依赖的测量手段（线性探针）正被文献警示可能虚假饱和，
+本报告同时\textbf{主动记录}了本项目最依赖的测量手段（线性探针）正被文献警示可能虚假饱和~\cite{gjepa}，
 以及对应的加固方案。
+
+\textbf{与测试时适配（TTA）/ 无源域适应（source-free DA）的关系}：
+与本工作最接近的是这一支，它已确立「冻结主干、只更新极少数参数」是分布偏移下的有效范式——
+\textbf{Tent} 冻结全部主干、只更新批归一化的仿射参数~\cite{tent}；
+\textbf{SHOT} 冻结特征提取器、只学习分类头，且不需要访问源数据~\cite{shot}；
+\textbf{Kumar 等}进一步证明预训练特征良好而偏移较大时线性探针可优于全量微调，
+并给出机制：微调在学头的同时会扭曲底层特征~\cite{lpft}。
+\textbf{本文与这三条的差异有三点}：① \textbf{偏移的性质不同}——TTA/DA 处理的是数据分布偏移，
+本文的失真是\textbf{确定性的、逐层累积的、输入相关的系统误差}，换一批测试数据不会让它消失；
+② \textbf{可动参数的范围与性质不同}——TTA 的"只动少数参数"是一种设计选择（主干在原理上仍可训练），
+而 CIM 里模拟权重\textbf{因硬件原因物理上不可重训}，冻结不是选择而是约束；
+③ \textbf{给出的量不同}——上述工作报告的是准确率，本文给出该约束下的\textbf{可恢复量上界}、
+\textbf{损伤的几何形态}与\textbf{代价的定量权衡}。
 \end{quote}
 
 \section{问题、口径与产物}
@@ -458,7 +471,8 @@ SimpleCNN 的该主干即 \texttt{task1} 权重，故与台账逐位一致）。
 \end{table}
 
 读出适配在三个主干上一致超过"全网络重训"整类配方，可训练参数只占 5.04\%/0.55\%，
-训练时间低约一个数量级（读出 12$\sim$30 min，主干重训 1$\sim$6.5 h）。
+训练成本\textbf{逐主干配对}为 1/5、1/16、1/13（读出 12 / 25 / 30 min 对全网络 1 / 6.5 / 6.5 h），
+约低一个数量级。
 代价是干净精度下降 3.08$\sim$7.69 个百分点（$\alpha=0$ 处：读出适配的三 seed 均值为
 55.81 / 64.97 / 65.00，对各自主干的原始头 59.99 / 68.05 / 72.69）。
 
@@ -467,19 +481,26 @@ SimpleCNN 的该主干即 \texttt{task1} 权重，故与台账逐位一致）。
 起作用的是\textbf{分布式}版本（$\alpha\sim U[\pm0.3]$ 上训练），它在每个扫描点都不显著劣化。
 同一层参数、两种训练方式给出质上不同的结果。
 
+\textbf{这条结论不只有探针读数背书}：冻结主干、只重训一个线性头，
+在 $\alpha=+0.3$ 上\textbf{实际达到 43.31}（SimpleCNN，3 seed，24\,ep 协议；同期原始头 28.09）——
+那是一个\textbf{真实可部署的分类器}，不是仅用于测量的探针。
+同口径的 \textbf{oracle-$\alpha$} 探针读数为 48.35，即部署物取到了上界的 \textbf{89.6\%}
+（$43.31/48.35$）。注意分母是 \textbf{oracle-$\alpha$} 口径（假定失真强度已知），
+因此这个比例\textbf{不是}"部署时可以达到 89.6\%"的意思。
+
 \subsection{训练端的四条路径为什么都没能改善尾部}
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.68\textwidth]{F04_training_paths.pdf}
-\caption{训练端的补救路径在 $\alpha=+0.3$ 上全部不优于均匀采样基准（CIFAR-100 / SimpleCNN）。
+\caption{训练端的补救路径在 $\alpha=+0.3$ 上没有一条\textbf{显著}优于均匀采样基准（CIFAR-100 / SimpleCNN）。
 数据：\texttt{outputs\_cifar100/v3\_methods/*/alpha\_sensitivity.csv}。}
 \label{fig:training}
 \end{figure}
 
 四条独立路径：采样预算分配（三种轮廓，最好 26.13，$+0.10$）、$\alpha$ 空间对抗训练（24.32，$-1.71$）、
 课程式采样（21.78，$-4.25$）、训练范围外推至 $\pm0.5$（20.48，$-5.55$）。
-基准（均匀采样）为 26.03。\textbf{没有一条超过基准}；按本文自订的单种子门槛
+基准（均匀采样）为 26.03。按本文自订的单种子门槛
 （尾部差值小于 3 个百分点不作为结论），其中只有课程式与外推两条可记为显著劣于基准
 （$-4.25$ / $-5.55$），对抗训练的 $-1.71$ 落在门槛内、记为\textbf{不可分辨}，
 预算分配的 $+0.10$ 与基准同级。\textbf{四条都没有改善尾部。}
@@ -575,8 +596,10 @@ max 的选择性 & 换成 top-2 池化（与 $f_\alpha$ 不可交换）
 架构杠杆与读出杠杆在尾部\textbf{可以同时受益，但显著次可加、不是相加}：
 \texttt{mp 主干 $+$ 读出适配} 的 $\alpha=+0.3$ 达 \textbf{49.12}
 （相对基线 28.09 即 $+21.03$），而两个手段单独的增益之和是 $+29.67$
-（架构 $+14.38$、读出 $+15.29$）——\textbf{合起来只拿到六到七成，损失三到四成}。
-该组为\textbf{单 seed} 口径（连续均匀 $\alpha$、24\,ep、20k 样本，同 v3 路径）；
+（架构 $+14.38$ 与读出 $+15.29$ 分别取自同批\textbf{单 seed} 产物的 42.47 与 43.38）
+——\textbf{合起来只拿到六到七成，损失三到四成}。
+本段四个数（28.09 / 42.47 / 43.38 / 49.12）\textbf{全部为单 seed 口径}
+（连续均匀 $\alpha$、24\,ep、20k 样本，同 v3 路径）；
 13 点离散 $\alpha$、3 seed 的 v5 口径给出同样的次可加结论。
 
 失真强度可由读出特征的岭回归在线恢复：四个主干$\times$数据集组合上
@@ -1085,6 +1108,36 @@ VGG-11 与 ResNet-18 的主干各只训一次；读出侧的 3 个种子不含�
 
 \textbf{(6) 读出适配要求读出层可写，且未评估其硬件代价。}
 
+\textbf{(7) 读出适配只在 $|\alpha|\le0.3$ 的窗口内评估过。}
+全部读出产物的 $\alpha$ 网格都是 $\pm0.3$ 七个点（\texttt{v3\_readout\_repair/*.csv}
+的表头逐字如此），\textbf{没有一份覆盖 $\pm0.4/\pm0.5$}。而原始头恰在那两处跌到 12.32 / 6.09，
+探针 headroom 反而最大（$+30.90$ / $+30.82$）——
+\textbf{读出杠杆在更远的尾部还能捞回多少，由现有数据无法回答}，
+而那里正是工程上最需要这个杠杆的地方。
+
+\textbf{(8) 架构杠杆只在含池化的主干上验证过。}
+「池化密度是独立杠杆」的证据全部来自 SimpleCNN 家族（MaxPool 2 个 $\to$ 5 个）；
+而本项目用的 ResNet-18 已按 CIFAR 适配去掉初始 MaxPool，其 \texttt{maxpool\_count} 为 0
+（\texttt{outputs\_cifar100/extension5\_dithering\_vgg11/arch\_dithering\_summary.csv}）——
+\textbf{对本身不含池化的架构（含注意力主干），这条建议没有对应的旋钮}，
+本文给不出替代方案；而第 \ref{sec:deploy} 节把它排在落地顺序的第一步。
+
+\textbf{(9) 证据全部来自 CIFAR 上的小型卷积主干。}
+参数量跨度只有 0.25\,M$\sim$11.2\,M，架构形态\textbf{全部是 ReLU $+$ 卷积/池化堆叠}
+（无注意力、无归一化型主干）。\textbf{「先测 headroom、再决定修哪里」这套测量顺序
+能否外推到注意力架构与更大规模，本文未验证}；而第 \ref{sec:deploy} 节的推演没有限定架构。
+
+\textbf{(10) 探针是 oracle-$\alpha$ 读数，缺一条与部署同构的读出臂。}
+探针逐 $\alpha$ 训练（见第 \ref{sec:findings} 节的口径标注），
+因此 headroom 度量的是"已知失真强度时还能恢复多少"。
+一条用 $\alpha$ 混合数据训练的（与部署同构的）读出臂\textbf{正在测量中}；
+在它落定之前，\textbf{headroom 与部署可达之间的缺口有多大，无法回答}。
+
+\textbf{(11) 低位量化与读出适配从未组合测量。}
+「低位量化在池化密集架构上反转为增益」的证据取自\textbf{未施加读出适配}的原始头，
+且固定在 $\alpha=+0.3$。两条杠杆（量化与读出适配）从未落在同一份产物上，
+\textbf{它们的收益是可加、还是互相挤占同一个补偿机制，本文无法判定}。
+
 \subsection{停车场（只登记不执行）}
 
 \begin{table}[h]
@@ -1157,11 +1210,12 @@ VGG-11 与 ResNet-18 的主干各只训一次；读出侧的 3 个种子不含�
   \item 在逐层三次多项式非线性失真下，网络在灾难尾损失的是\textbf{读出的可解码性}
         而非表征中的信息（oracle-$\alpha$ 探针 headroom 20.26 个百分点；高斯噪声下仅 7.50）。
   \item 据此，冻结全部模拟权重、只重训最后的线性层，可把尾部提升 \textbf{$+15.2\sim+31.8$} 个百分点（CIFAR-100，24\,ep/20k，各 3 seed），
-        成本约为主干重训的 1/5$\sim$1/30（12$\sim$30 min 对 1$\sim$6.5 h），并一致超过所有全网络鲁棒训练配方。
+        成本约为主干重训的 1/5$\sim$1/16（逐主干配对：读出 12 / 25 / 30 min 对全网络 1 / 6.5 / 6.5 h），
+        并一致超过所有全网络鲁棒训练配方。
   \item 训练端的四条补救路径没有一条改善尾部（两条显著劣于基准、一条落在单种子门槛内、
         一条与基准同级）；正侧尾部是结构性不可训练区，
         其形态是\textbf{维度丢失}（有效秩下降 20.6\%$\sim$58.7\%）而非类间距缩小。
-  \item 架构端的池化密度提供另一条零成本的独立杠杆（$+14.38$ 个百分点），
+  \item 架构端的池化密度提供另一条零成本的独立杠杆（同协议同 seed 配对 $+15.52$ 个百分点），
         其保护主要来自降维；两个杠杆在尾部可以同时受益，但\textbf{显著次可加、不独立相加}。
   \item 失真强度可由岭回归在线恢复（$R^2$ 0.83$\sim$0.94），使门控可以逼近 oracle；
         但门控有效需两个前提同时成立。
@@ -1180,6 +1234,10 @@ VGG-11 与 ResNet-18 的主干各只训一次；读出侧的 3 个种子不含�
 \bibitem{resnet} He K, Zhang X, Ren S, et al. Deep residual learning for image recognition[C]//CVPR. Las Vegas: IEEE, 2016: 770--778.
 \bibitem{vgg} Simonyan K, Zisserman A. Very deep convolutional networks for large-scale image recognition[C]//ICLR. San Diego: ICLR, 2015: 1--14.
 \bibitem{cifar} Krizhevsky A. Learning multiple layers of features from tiny images[R]. Toronto: University of Toronto, 2009.
+\bibitem{lpft} Kumar A, Raghunathan A, Jones R, et al. Fine-tuning can distort pretrained features and underperform out-of-distribution[C]//ICLR. 2022. arXiv:2202.10054.
+\bibitem{tent} Wang D, Shelhamer E, Liu S, et al. Tent: fully test-time adaptation by entropy minimization[R]. 2020. arXiv:2006.10726.
+\bibitem{shot} Liang J, Hu D, Feng J. Do we really need to access the source data? Source hypothesis transfer for unsupervised domain adaptation[R]. 2020. arXiv:2002.08546.
+\bibitem{gjepa} Rabby G, Auer S. When Graph-JEPA learns the wrong thing: diagnosing and repairing category-conditional collapse[R]. 2026. arXiv:2608.20516.
 \end{thebibliography}
 
 \end{document}
