@@ -624,6 +624,77 @@ CIFAR-10：$+6.53$）。三个候选假设通过剂量匹配的三组对照、�
 这条结果对"数字域后处理能救多少"给出了分层答案：
 同一个 4 bit ADC，在池化密集架构上是补偿，在池化稀疏架构上是负担。
 
+\subsection{为一种失真做的鲁棒性训练，不会顺带保护另一种}
+
+前九节讨论的都是同一类扰动：确定性的、输入相关的非线性失真。
+现实中的模拟域还有另一类误差源——零均值、与信号无关的\textbf{加性随机噪声}。
+一个自然的问题是：\textbf{为其中一种训练出的鲁棒性，能不能迁移到另一种？}
+如果不能，那么两类误差必须分别对待；如果能，联合训练就够。
+
+\paragraph{迁移：近正交，但幅度依赖架构。}
+把一条通路上训好的权重拿到另一条通路上扫，测"扰动敏感性"的变化幅度
+$\max|\Delta_\sigma|$（超过 1.2 个百分点判为非零迁移）：
+
+\begin{center}
+\small
+\begin{tabular}{llc}
+\toprule
+架构 & 配方对 & $\max|\Delta_\sigma|$ \\
+\midrule
+SimpleCNN & Exp2（校准）vs 原始 & 1.16 \\
+SimpleCNN & NAT-scratch vs clean & 2.43 \\
+SimpleCNN $+$ 3$\times$MaxPool & NAT vs clean & 0.98 \\
+\textbf{VGG-11} & \textbf{Exp2（校准）vs clean} & \textbf{5.26} \\
+ResNet-18 & Exp2（校准）vs clean & 1.41 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+⇒ 「两通路正交、迁移为零」这条结论\textbf{是架构依赖的}：
+在 SimpleCNN 与 ResNet-18 上成立（$\le$1.41），
+但在 \textbf{MaxPool 密集的 VGG-11 上被打破}（5.26）。
+值得注意的是，加三个 MaxPool 反而\textbf{降低}了迁移（2.43 $\to$ 0.98），
+所以"MaxPool 密度"本身不是迁移的成因——更可能是校准模块作用于空间特征图的方式（\S\ref{sec:related} 的讨论）。
+
+\paragraph{训练端：不是零迁移，而是\textbf{单向强干扰}。}
+迁移幅度小，容易被读成"两者互不影响"。但训练端的对照否证了这个读法。
+在同一个 harness 上做 $2\times2$（是否注入 $\alpha$ $\times$ 是否注入 $\sigma$）：
+
+\begin{center}
+\small
+\begin{tabular}{lcccc}
+\toprule
+训练条件 & clean & $\alpha=+0.3$ & $\sigma=0.30$ & 双扰动最坏点均值 \\
+\midrule
+无训练（clean 模型） & 59.99 & 28.09 & 3.98 & 16.04 \\
+$\alpha$-only & \textbf{60.85} & 26.03 & 4.40 & 15.22 \\
+$\sigma$-only & 55.79 & 22.01 & \textbf{27.19} & \textbf{24.60} \\
+$\alpha+\sigma$（联合） & 55.20 & 15.27 & \textbf{31.31} & 23.29 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+三件事同时成立：
+
+\textbf{(1) $\alpha$ 训练对 $\sigma$ 几乎零收益}（4.40 vs 3.98）——这一侧确实是正交的。
+\textbf{(2) 但 $\sigma$ 训练使 $\alpha$ 侧付出代价}：$\alpha=+0.3$ 从 28.09 掉到 22.01（$-6.08$），
+干净精度也掉 4.20。联合训练更糟：$\alpha$ 侧 15.27
+（相对 clean 模型 $-12.82$，相对只做 $\alpha$ 训练的 26.03 又低 $-10.76$）。
+\textbf{(3) 双扰动并存时的最优配方是 $\sigma$-only，不是联合训练}：
+joint 里的 $\alpha$ 注入是\textbf{净负担}——它在 $\sigma$ 侧只多拿 4.12，
+却付出 $\alpha$ 侧 $-6.74$。
+
+⇒ 正确表述不是"两条通路正交"，而是「\textbf{迁移近正交，但训练端存在单向强干扰}
+（$\sigma\to\alpha$ 有代价、$\alpha\to\sigma$ 无收益）」。
+
+\paragraph{这条结论的工程含义。}
+如果部署环境同时存在两类误差，\textbf{不应把两种扰动一起塞进训练}——
+应该先显式训 $\sigma$ 鲁棒性（它是必须显式训练的，且收益大：$\sigma=0.3$ 处 3.98 $\to$ 27.19），
+然后\textbf{在读出侧}单独处理非线性失真（第 \ref{sec:probe} 节的方法正好不碰主干，
+因此不会与 $\sigma$ 训练互相干扰）。
+换言之，本节的结论与本文的主线是一致的：
+\textbf{训练端做的事越少越好，剩下的交给读出。}
+
 \subsection{这些效应有多大：用错协议会把方差估高六倍}
 \label{sec:variance}
 
