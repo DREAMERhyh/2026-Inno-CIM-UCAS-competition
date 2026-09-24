@@ -855,6 +855,56 @@ B 训出的\textbf{六个} run 全部落在 $26.58\pm0.29$，两者相差 \textb
 随机扰动与确定性系统误差在这个量上清楚地分开——
 前者需要的是表征层面的平滑，后者需要的是解码层面的重定向。
 
+\subsection{若要落到真实器件的数字后端}
+
+本节把上面的结论映射到存内计算的实际约束上：模拟阵列负责乘累加、权重\textbf{固化}，
+阵列输出经 ADC 回到数字域，失真发生在模拟域的输入侧。
+判定分三档——\textbf{可行} / \textbf{需改动} / \textbf{不可行}：
+
+\begin{center}
+\small
+\begin{tabular}{p{3.0cm}p{2.0cm}p{9.4cm}}
+\toprule
+组件 & 判定 & 依据 \\
+\midrule
+\textbf{读出适配} & \textbf{需改动}
+& 要求读出层位于数字域、或阵列里那一小块可重写。读出层只占全模型参数的
+  \textbf{5.04\%}（SimpleCNN）/ \textbf{0.55\%}（VGG-11），挪出阵列对面积影响很小 \\[2pt]
+\textbf{在线 $\alpha$ 估计} & \textbf{可行}
+& 一次 $d$ 维点积（$d=128/512$），算力占主干前向的 \textbf{3.8e-4\%} / 2.4e-4\% \\[2pt]
+\textbf{软门控} & \textbf{可行}（前提同第一条）
+& 数字域逐元素运算，每次推理约 \textbf{400} 次操作；
+  干净头是冻结不动的那一个，正好可以固化在 ROM 里 \\[2pt]
+\textbf{冻结主干} & \textbf{可行}
+& 就是"不训练主干"，天然符合权重固化 \\[2pt]
+\textbf{MaxPool 密集主干} & \textbf{设计阶段零成本} / 部署后不可行
+& 它是网络\emph{定义}的改动，只能在投片前决定；好消息是它零训练成本 \\[2pt]
+\textbf{全网络重训} & \textbf{不可行}
+& 阵列权重是烧录/固化的；而且训练端的四条路本来就救不了尾部（第 \ref{sec:limit} 节）\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent\textbf{推荐的落地顺序}（三步，前两步都有实测支撑）：
+
+\begin{enumerate}[leftmargin=2em,itemsep=2pt]
+  \item \textbf{架构端先上}：MaxPool 密集主干。零训练成本，尾部 $+14.38$ 个百分点——
+        但它只能在\emph{投片前}决定，所以这一条要最先定。
+  \item \textbf{读出端再训}：$\alpha$-混合鲁棒头（24 epoch，约 12 分钟）。尾部再抬升一截，
+        代价是干净精度下降——\textbf{代价的大小决定了第三步要不要做}。
+  \item \textbf{门控按需加}：仅当鲁棒头的干净代价足够大时（CIFAR-100 式细粒度任务，
+        代价 $-5.89$）才加，且\emph{先查两个头的逐 $\alpha$ 曲线}（第 \ref{sec:gating} 节的前提②）。
+        代价 $\lesssim$1 pp 时直接用单鲁棒头。
+\end{enumerate}
+
+\textbf{一个必须说清的结构性前提}：以上全部依赖\textbf{读出层可写}。
+若某款 CIM 把读出层也固化在阵列里，本方法整体不成立——
+这不是精度问题，是可行性问题，因此它出现在第 \ref{sec:limit} 节的第一条局限里。
+
+\noindent\textbf{本节的边界}：以上是\textbf{推演}，不是实测。
+没有硬件实测、没有 RTL 或功耗仿真、也没有写出"读出层挪到数字域"的接口约定
+（时序、位宽、与 ADC 的对接）。面积、延迟、功耗的绝对值本文没有算过。
+
 \subsection{打开的问题空间}
 
 \begin{enumerate}[leftmargin=2em,itemsep=2pt]
