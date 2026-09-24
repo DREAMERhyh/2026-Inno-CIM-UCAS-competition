@@ -1,0 +1,67 @@
+{
+  "purpose": "更正 samplesize_ext_meta.json 里 s_early / s_late 的基准不一致",
+  "defect": "s_early 的 A(20000) 取自 §16.5 首跑，s_late 的 A(20000) 取自重算 —— 同一个量两个取值",
+  "detected_by": "claude-e9（交叉校验）",
+  "detected_on": "2026-09-24",
+  "note": "原 meta 未改写，保留为证据；本文件为更正记录。",
+  "pool_explains_n20000_gap": {
+    "samplesize_curve.csv (S16.5)": "N_TRAIN_POOL=20000 ⇒ 该表 n=20000 是『整个池』而非随机子集，故 seed std 近乎 0",
+    "samplesize_ext.csv (S16.5a)": "N_TRAIN_POOL=50000 ⇒ n=20000 是 50000 的随机子集，有真实抽样方差",
+    "conclusion": "两次 n=20000 的 0.18pp 差与 std 差 20 倍，由采样池不同解释，不是协议不一致"
+  },
+  "variants": {
+    "+0.0": {
+      "inputs": {
+        "A8000_S16.5": 53.56,
+        "A20000_S16.5": 56.3367,
+        "A20000_recompute": 56.5167,
+        "A50000": 59.0
+      },
+      "literal_preregistered_both_from_S16.5": {
+        "s_early": 3.0304,
+        "s_late": 2.9066,
+        "r": 0.9592,
+        "branch": "②"
+      },
+      "both_from_recompute": {
+        "s_early": 3.2268,
+        "s_late": 2.7102,
+        "r": 0.8399,
+        "branch": "②"
+      },
+      "executed_mixed": {
+        "s_early": 3.0304,
+        "s_late": 2.7102,
+        "r": 0.8943,
+        "branch": "②"
+      }
+    },
+    "+0.3": {
+      "inputs": {
+        "A8000_S16.5": 48.32,
+        "A20000_S16.5": 52.92,
+        "A20000_recompute": 52.6233,
+        "A50000": 55.72
+      },
+      "literal_preregistered_both_from_S16.5": {
+        "s_early": 5.0202,
+        "s_late": 3.0558,
+        "r": 0.6087,
+        "branch": "②"
+      },
+      "both_from_recompute": {
+        "s_early": 4.6964,
+        "s_late": 3.3796,
+        "r": 0.7196,
+        "branch": "②"
+      },
+      "executed_mixed": {
+        "s_early": 5.0202,
+        "s_late": 3.3796,
+        "r": 0.6732,
+        "branch": "②"
+      }
+    }
+  },
+  "conclusion": "三个变体全部落在分支 ② ⇒ 判决不变；『预登记字面』为主报值（r = 0.9592 / 0.6087）"
+}
