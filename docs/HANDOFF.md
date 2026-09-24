@@ -28,6 +28,10 @@
 
 ## 1. 你的第一个动作（5 分钟）
 
+> 🔴 **如果你（或用户）刚刚重启过机器 —— 先做 §1·补 那一条。**
+> **守护进程脱离得了"会话"，脱离不了"机器重启"**（2026-09-24 实测：18:35 重启，
+> 守护与训练**一起静默消失**，M4 空转 48 分钟才被发现，**没有任何自动机制会告诉你它停了**）。
+
 ```bash
 cd "d:/deeplearning_practice/存算一体"
 PY=/d/anaconda3/envs/pytorch_env/python
@@ -46,6 +50,27 @@ PYTHONIOENCODING=utf-8 $PY tools/check_papers.py     # 退出码 0
 # ④ 台账自洽
 PYTHONIOENCODING=utf-8 $PY build_ledger.py           # 152 rows / pairing FAIL = 0
 ```
+
+### 1·补、**开机 / 重启后必做**
+
+```bash
+# 训练在不在？守护在不在？（两个都空 ⇒ 被重启带走了，要重新拉起）
+powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"name='python.exe'\" | ? { \$_.CommandLine -like '*deep_robust*' } | Select ProcessId"
+powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"name='powershell.exe'\" | ? { \$_.CommandLine -like '*-File*v7_m4_watch'+'dog.ps1*' } | Select ProcessId"
+
+# 真完成的唯一判据（⚠ best_model.pth 存在 ≠ 跑完 —— 可能是崩溃残骸）
+ls outputs_cifar100/extension6_deep_robust/resnet18_exp3_s4{3,4}/metrics.json
+
+# 若要重新拉起守护（它会自己判断该跑哪个 run）：
+powershell -NoProfile -Command "Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile','-File','d:\deeplearning_practice\存算一体\tools\v7_m4_watchdog.ps1' -WindowStyle Hidden"
+```
+
+**它启动后会先"连续缺席计数 5 次（×60s）"再接手 —— 所以拉起来后要等约 5 分钟才开始训练。这是设计如此（防链路切换瞬间误判），不是卡住。**
+
+> ⚠ **本机物理内存只有 16 GB（用户 2026-09-24 明确要求收紧并行度）。**
+> **不要一次开一堆会话放着**：6 个 Claude 会话合计约 664 MB（不是最大头，但也不是零），
+> 真大头是 VS Code（~5 GB）+ 训练（~6 GB）+ 用户自己的程序。
+> **唯一不可省的常驻：① 训练进程 ② 它的守护进程 ③ 总管会话。**
 
 然后读 `docs/V7_COORDINATION.md`——**领地划分、红线、通信协议、坑表都在那里。**
 
