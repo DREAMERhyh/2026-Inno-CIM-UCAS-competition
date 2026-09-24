@@ -1,0 +1,3 @@
+condition,probe_same_cond_v7,probe_same_cond_v3,d_probe,head_acc_v7,head_acc_v3,d_head,headroom_v7,headroom_v3,d_headroom,head_exact,probe_within_tol
+clean,52.91,52.91,0.0025,59.6,59.6,0.0,-6.69,-6.69,0.0025,True,True
+all|alpha=+0.3,47.88,47.89,0.015,27.76,27.76,0.0025,20.11,20.12,0.0075,False,True
