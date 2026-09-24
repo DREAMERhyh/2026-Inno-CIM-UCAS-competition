@@ -694,6 +694,170 @@ shared 26.55 vs per-layer 26.57，差 $+0.02$（$z=0.08$）；
         包括那些最终被否证的。
 \end{enumerate}
 
+\section{第七阶段：归档后的自主迭代}
+\label{sec:v7}
+
+\begin{quote}
+\small 归档（tag \texttt{v1.0-archive}）之后又进行了一轮自主迭代。
+本节记录它的产出——分两类：\textbf{加强结论的}，与\textbf{排除解释的}。
+详细台账见 \texttt{experiments\_ledger.md} §16。
+\end{quote}
+
+\subsection{两条加强中心结论的结果}
+
+\textbf{(1) 容量不是这里的瓶颈。}
+此前所有读出都是\textbf{线性}的，所以"瓶颈在读出"有一个明显的反驳：
+也许瓶颈只是在线性。为排除它，在同一批冻结特征上比较六种读出
+（$\alpha=+0.3$，CIFAR-100，$n_{\text{train}}=8000$）：
+
+\begin{center}
+\small
+\begin{tabular}{lc}
+\toprule
+读出 & 精度（\%） \\
+\midrule
+\textbf{线性头（torch，同族公平锚）} & \textbf{51.47} \\
+强正则逻辑回归（$C=0.01$） & 49.23 \\
+sklearn 逻辑回归（跨优化器参考臂） & 48.25 \\
+两层 MLP（$128\to256\to100$） & 48.62 \\
+瓶颈 MLP（$128\to32\to100$） & 43.38 \\
+k-NN（$k=20$） & 38.12 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+三种非线性读出\textbf{没有一个超过线性头}，差距远超本轮立的可分辨门槛
+（$\Delta_{\text{proc}}=3.45$ pp，见下）。而且\textbf{参数越多反而越差}——
+典型过拟合序。⇒ 「信息仍线性可达」从"只测过线性"升级为
+「\textbf{测过 k-NN 与两种 MLP 之后，线性头仍是最优读出}」。
+
+\textbf{(2) headroom 是下界，而且可以抬高。}
+把探针的训练样本从 8000 加到 50000（训练集全量）：
+
+\begin{center}
+\small
+\begin{tabular}{lccc}
+\toprule
+& 探针（$n$=8000） & 探针（$n$=50000） & 冻结头 \\
+\midrule
+clean & 53.56 & \textbf{59.00} & 59.99 \\
+$\alpha=+0.3$ & 48.35 & \textbf{55.72} & 28.09 \\
+\midrule
+headroom @$+0.3$ & $+20.26$ & $\bm{+27.63}$ & --- \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{且仍未饱和}（等宽对数斜率比 $r=0.96/0.61$，判据要求 $\le0.5$）。
+按"不相交划分"校正（约 $-2.2$）后约 $+25.4$。
+
+\textbf{这条观测的含义比数字本身重要}：$+20.26$ 不是表征的某个固定属性，
+它是"探针只喂了 8000 个样本"下的读数。
+⇒ \textbf{headroom 是读出训练方式的函数}——与下面那条"过程自由度"是同一件事的两个侧面。
+\textbf{读出这一层不是免费的。}
+
+\subsection{四条排除型结论}
+
+\begin{center}
+\small
+\begin{tabular}{p{4.2cm}p{9.6cm}}
+\toprule
+方向 & 判决 \\
+\midrule
+ETF / 原型读出 & \textbf{无增益}。三种原型或 ETF 正则读出均未超过线性头，
+  且几何诊断（下一条）事先预测了这一点 \\
+神经坍缩（NC）几何 & \textbf{远离 ETF}。类均值夹角偏离与模长变异系数在正侧 5/5 上升
+  ⇒ 「正侧 Fisher 反而高于负侧」这条异常\textbf{不能用 NC 解释} \\
+"少样本即可恢复全表示" & \textbf{不成立}。读出样本量曲线在 500$\sim$50000 上单调上升且\textbf{未饱和}，
+  需数千量级样本 \\
+门控两前提的装前自检 & \textbf{不分离}。两种候选量化定义在已有的 7 个点上都分不开红利的符号 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{排除型结论的价值在于：它们各自堵死一个替代解释。}
+尤其第一条——原来"读出瓶颈"可以被反驳为"你只测了线性头"，现在这个反驳不成立了。
+
+\subsection{方法学产出（本阶段最值钱的部分）}
+
+\textbf{(a) 三级可分辨性。}
+「跨实现不可移植」是一个已知未知，无法直接当门槛用。但它旁边两级\textbf{可测}的散布，
+合起来给出一个可操作的尺度：
+
+\begin{center}
+\small
+\begin{tabular}{llc}
+\toprule
+层级 & 变的是什么 & 实测幅度 \\
+\midrule
+① 种子噪声 & 同一过程重复 & 尾部 $\pm0.39\sim3.40$；clean $\pm0.07\sim1.85$ \\
+\textbf{② 过程自由度} & \textbf{同数据、同特征、同架构，只换拟合过程} & \textbf{3.45 pp} \\
+③ 跨实现 & 同超参同种子，实现不同 & 5.55 pp（未归因） \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+第②级是这样测的：同一批冻结特征、同一个线性头，只换六种拟合过程
+（sklearn lbfgs / saga；torch Adam 50/150/400 轮；SGD+动量 150 轮）。
+结果极差 \textbf{3.45$\sim$3.46 pp}。
+
+\textbf{一个反直觉的细节}：$\alpha=0$ 的最大值与最小值\textbf{都来自同一个优化器的不同轮数}
+（Adam 50 轮最高 56.31、Adam 400 轮最低 52.85）。
+⇒ \textbf{过程自由度的主要来源是"训多久"，不是"用哪个"。}
+
+⇒ 由此立一条规则：\textbf{任何"读出类"效应（换头、加正则、改容量）的可分辨门槛，
+必须同时以 $\Delta_{\text{proc}}$ 为参照，不能只用种子噪声}——
+种子噪声测的是"同一过程重复"，$\Delta_{\text{proc}}$ 测的是"换一个过程"，
+\textbf{后者才是接收端口真正面对的不确定性}。
+
+\textbf{(b) 两条口径陷阱（都是本轮内实测触发的，不是转引文献）。}
+
+\begin{center}
+\small
+\begin{tabular}{lll}
+\toprule
+陷阱 & 不做会怎样 & 为什么会 \\
+\midrule
+不做 \textbf{RMS 归一化} & 负侧结论\textbf{反号} & $\alpha<0$ 把深层激活抬到 1.87 倍，
+  固定绝对噪声相对更"小"，失真组虚假显得更鲁棒 \\
+不做\textbf{中心化} & 判决从分支②变③ & NC 的定义是"以全局均值为中心"的单纯形框架；
+  不去均值则度量的是别的几何量 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{(c) 两个工具（把纪律固化，不靠记性）。}
+
+\begin{itemize}[leftmargin=2em,itemsep=2pt]
+  \item \texttt{tools/check\_papers.py}：提交前检查（markdown 残留 + 编译两遍 + 数错误 + 数未定义引用）。
+        \textbf{本阶段在 \texttt{.tex} 里混写 markdown 踩了 8 次，其中 7 次由它拦下}——
+        手动检查已被证明不可靠（有两次是"修完以为干净了、实际还有"）。
+  \item \texttt{docs/DERIVED\_VALUES.md}：派生值登记表。
+        均值、差值、比值这类数字\textbf{不以字面形式存在于任何产物文件里}，
+        复核的人必须知道算式才复得出来。该表登记它们的文件/行/列/合成方式。
+\end{itemize}
+
+\subsection{本阶段自我暴露的问题（同样留痕）}
+
+\begin{center}
+\small
+\begin{tabular}{p{3.6cm}p{10.2cm}}
+\toprule
+问题 & 处置 \\
+\midrule
+探针 headline 曾是 8000 子集口径 & 台账 §6 登记过、但没传播进论文。重跑全量口径并替换，
+  扫了 5 个文件 49 处数字 \\
+一处数字\textbf{全仓库无出处} & 追查 \texttt{12.76} 时发现它不存在，原句还把两个不同基线的数并进一个区间。
+  登记为勘误 12 \\
+四处 Fisher 措辞\textbf{丢了比较对象} & "正侧升高"不成立（正侧内部只有 $+0.1$ 升），
+  且\textbf{可被本文自己的表格否证}。全部改为带比较对象的写法 \\
+读出适配的\textbf{命名会骗人} & \texttt{s4\{2,3,4\}} 三个文件其实是\textbf{同一个主干}变读出种子。
+  新主干改用 \texttt{bs<seed>} 区分，并加"原头读数 = 主干 metrics"的核验 \\
+\textbf{摘要与贡献列表落后于正文} & 正文加了四块内容后外围文档没跟上。\textbf{这是"扫引用链"在文档层的同类问题} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
 \section{工程落地推演}
 \label{sec:deploy}
 

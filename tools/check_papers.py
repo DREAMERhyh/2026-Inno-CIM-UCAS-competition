@@ -41,6 +41,11 @@ def check_source(tex_path):
             problems.append(f"    行 {i}: markdown 粗体 `**` —— 会静默渲染成字面星号")
         if "`" in line:
             problems.append(f"    行 {i}: 反引号 —— 会渲染成引号（成对时不报错）")
+        # markdown 引用块：行首的 "> " —— LaTeX 里会渲染成字面的 > 加空格
+        # （用 \begin{quote} 才是 LaTeX 的引用块）
+        if stripped.startswith(">"):
+            problems.append(f"    行 {i}: markdown 引用块 `>` —— 会渲染成字面的大于号，"
+                            f"应改用 quote 环境")
     return problems
 
 
