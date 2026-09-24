@@ -277,6 +277,45 @@ ResNet-18 则反之 57.15 vs 17.08）；
 量化与非线性的联合作用呈\textbf{三分格局}——SimpleCNN 超加性恶化（4bit $\Delta=-7.23$）、
 VGG-11 次加性即 Dithering（$\Delta=+7.82$）、ResNet-18 地板效应（$\Delta=+1.05$）。
 
+\textbf{【第三阶段的细化：L3 两通路机制】}
+上段"不可跨域迁移"在第三阶段被两步修订，此处补入归档（这是本项目最早确立的三条定律之一）。
+
+\textbf{① 迁移层面——"零迁移"是架构依赖的。}
+把一条通路训好的权重拿到另一条通路上扫，测扰动敏感性的变化幅度
+$\max|\Delta_\sigma|$（>1.2 判非零）：SimpleCNN 1.16（Exp2 vs 原始）、
+SimpleCNN 2.43（NAT vs clean）、\textbf{VGG-11 5.26（Exp2 vs clean，零迁移被打破）}、ResNet-18 1.41。
+值得注意的是，给 SimpleCNN 加 3 个 MaxPool 反而把迁移\textbf{从 2.43 降到 0.98} ——
+说明 MaxPool 密度不是迁移的成因。
+
+\textbf{② 训练层面——不是零迁移，而是单向强干扰。}
+同一 harness 上的 $2\times2$（是否注入 $\alpha$ $\times$ 是否注入 $\sigma$）：
+
+\begin{center}
+\small
+\begin{tabular}{lcccc}
+\toprule
+训练条件 & clean & $\alpha=+0.3$ & $\sigma=0.30$ & 双扰动最坏点均值 \\
+\midrule
+无训练（clean 模型） & 59.99 & 28.09 & 3.98 & 16.04 \\
+$\alpha$-only & 60.85 & 26.03 & 4.40 & 15.22 \\
+$\sigma$-only & 55.79 & 22.01 & \textbf{27.19} & \textbf{24.60} \\
+$\alpha+\sigma$（联合） & 55.20 & 15.27 & 31.31 & 23.29 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+$\alpha$ 训练对 $\sigma$ 几乎零收益（4.40 vs 3.98）；
+但 $\sigma$ 训练使 $\alpha$ 侧从 28.09 掉到 22.01（$-6.08$，对 clean 模型），
+联合训练进一步掉到 15.27（对只做 $\alpha$ 训练的 26.03 再低 $-10.76$）。
+\textbf{双扰动并存时的最优配方是 $\sigma$-only，不是联合训练}——
+joint 里的 $\alpha$ 注入是净负担（$\sigma$ 侧仅多拿 4.12，却付出 $\alpha$ 侧 $-10.76$）。
+⇒ 正确表述是「\textbf{迁移近正交，但训练端存在单向强干扰}（$\sigma\to\alpha$ 有代价、$\alpha\to\sigma$ 无收益）」。
+
+\textbf{数字出处}：上表三行取自 \texttt{outputs\_cifar100/v3\_methods/}
+的 \texttt{gauss\_uniform} / \texttt{joint\_uniform} / \texttt{budget\_uniform} 三份
+\texttt{alpha\_sensitivity.csv}（逐位可核）。迁移幅度表见第 \ref{sec:findings} 节
+与 \texttt{论文v3.md} §8 勘误 12。
+
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.62\textwidth]{C06_dithering_arch.pdf}
