@@ -363,9 +363,14 @@ def f06():
 # =====================================================================
 def f07():
     p("\n[F7] 池化密度 2→5（零训练成本）")
-    # 图例直接写明各自的协议，让"异协议锚点"在**图内**就自我说明（原先只在图注里说）
-    pairs = [("2×MaxPool（第一阶段 100 ep，仅作锚点）", "outputs_cifar100/task1_simplecnn/alpha_sensitivity.csv", BASE, "--"),
-             ("5×MaxPool（第三阶段 120 ep）", "outputs_cifar100/v3_methods/simple_cnn_mp_clean_uniform/alpha_sensitivity.csv", WONG[6], "-")]
+    # 图例写明协议来源，让"异协议锚点"在**图内**自我说明。
+    # ⚠ **不写 epoch 数**：两条曲线的主干**都是 120 epoch**
+    #   （outputs_cifar100/simple_cnn/metrics.json: best_epoch 114/120, acc 59.99；
+    #    v3_methods/simple_cnn_mp_clean_uniform/metrics.json: best_epoch 101/120, acc 60.99），
+    # 差别在**训练脚本（第一阶段 train.py vs 第三阶段 v3_methods_simplecnn.py）**，不在"训多久"。
+    # 原写"100 ep"来自 CIFAR-10 那一批 task1 模型（results_master.csv 中 outputs/task1_* 才是 100）。
+    pairs = [("2×MaxPool（第一阶段脚本，仅作锚点）", "outputs_cifar100/task1_simplecnn/alpha_sensitivity.csv", BASE, "--"),
+             ("5×MaxPool（第三阶段脚本）", "outputs_cifar100/v3_methods/simple_cnn_mp_clean_uniform/alpha_sensitivity.csv", WONG[6], "-")]
     fig, ax = plt.subplots(figsize=(5.4, 3.4))
     for lab, rel, c, ls in pairs:
         a, v = alpha_curve(rel)
