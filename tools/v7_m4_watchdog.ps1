@@ -1,37 +1,67 @@
 # =====================================================================
-#  M4 训练链守护进程（脱离会话运行）
+#  M4 training-chain watchdog (detached from any session)
 # =====================================================================
-#  立此脚本的直接原因：M4 训练链挂在总管会话的进程树下，
-#  上一个总管会话上下文占满被杀时，把它一起带走了（见 docs/HANDOFF.md 2 节）。
-#  重启后用的还是同一机制 => 同一个事故还会再犯一次。
+#  WHY: the M4 chain runs as a child of the supervising session's process
+#  tree. When that session died once, it took the training with it.
+#  This watchdog is launched detached (see docs/V7_COORDINATION.md 5-suppl-1)
+#  so the training survives any session death.
 #
-#  设计要点：**零损失**——不杀正在跑的训练，只在"训练进程真的消失了
-#  且还有没跑完的 run"时接手补齐。
+#  DESIGN: zero-loss. It never kills a running training. It only takes over
+#  when the training process is really gone AND some run is still missing.
 #
-#  !! 本文件刻意不含任何非 ASCII 字符 !!
-#  PowerShell 5.1 读无 BOM 的 UTF-8 .ps1 时按 ANSI 解码，中文路径会被读成乱码
-#  => 所有路径一律从 $PSScriptRoot 推导出来，不写字面量。改动时请保持这一点。
+#  !! THIS FILE MUST STAY PURE ASCII !!
+#  PowerShell 5.1 decodes a BOM-less UTF-8 .ps1 as ANSI, which mangles any
+#  non-ASCII path. All paths are derived from $PSScriptRoot instead.
+#  Also: use CRLF line endings and do NOT use backtick line-continuation
+#  (PS 5.1 + LF + backtick => ParserError, process exits instantly).
 #
-#  启动方式（必须 Start-Process 才能脱离会话）：
+#  LAUNCH:
 #    powershell -NoProfile -Command "Start-Process -FilePath 'powershell.exe' `
-#      -ArgumentList '-NoProfile','-File','<本文件的绝对路径>' -WindowStyle Hidden"
-#  执行策略：本机 CurrentUser = RemoteSigned，本地脚本直接可跑，**不需要** Bypass。
+#      -ArgumentList '-NoProfile','-File','<abs path to this file>' -WindowStyle Hidden"
+#  NOTE: CurrentUser execution policy is RemoteSigned, so local scripts run
+#  without any flag. Do NOT pass -ExecutionPolicy Bypass (it is unnecessary
+#  and needlessly weakens a security control).
+#
+#  ---------------------------------------------------------------------
+#  BUG FIXES 2026-09-24 (found by claude-cf; this is the SECOND revision)
+#  ---------------------------------------------------------------------
+#  v1 had a serious defect: it treated "the training process exited" as
+#  "the run finished". A CRASH also exits the process. Observed damage:
+#     16:37:26  launching seed 43
+#     16:44:11  seed 43 finished          <-- only 6m45s for a 6-8h run!
+#     16:44:11  launching seed 44         <-- moved on, abandoning seed 43
+#  Fixes:
+#   (1) Completion is judged ONLY by the artifact:
+#       <outRoot>\<dir>\metrics.json exists AND its total_epochs == expected
+#   (2) After a launch returns, re-check the artifact. If it is not there,
+#       that was a CRASH -> break out of the chain (do NOT start the next run)
+#   (3) Exponential backoff on consecutive crashes
+#   (4) Memory gate: never launch while free physical memory is too low
 # =====================================================================
 
 $ErrorActionPreference = 'Continue'
 
-# ---- 路径全部推导，不写中文 ----
-$repo = Split-Path -Parent $PSScriptRoot          # 本文件在 <repo>\tools\ 下
+# ---- paths are derived, never written as literals (see ASCII note above) ----
+$repo = Split-Path -Parent $PSScriptRoot          # this file lives in <repo>\tools\
 $py   = 'D:\anaconda3\envs\pytorch_env\python.exe'
-$trainScript = 'task_extension6_deep_robust_train.py'   # 相对名，配合 -WorkingDirectory
+$trainScript = 'task_extension6_deep_robust_train.py'   # relative; resolved via -WorkingDirectory
 $outRoot     = Join-Path $repo 'outputs_cifar100\extension6_deep_robust'
 $log         = Join-Path $repo 'logs_v7_m4_watchdog.log'
 
-# 本次要跑的 run（1/4、2/4 的 vgg11 已完成；余下这两个）
+# Remaining runs. 1/4 and 2/4 (vgg11) are already done.
+#  3/4  resnet18 / exp3 / seed43 / 200ep  ->  resnet18_exp3_s43
+#  4/4  resnet18 / exp3 / seed44 / 200ep  ->  resnet18_exp3_s44
 $runs = @(
-    @{ seed = 43; dir = 'resnet18_exp3_s43' },
-    @{ seed = 44; dir = 'resnet18_exp3_s44' }
+    @{ seed = 43; dir = 'resnet18_exp3_s43'; epochs = 200 },
+    @{ seed = 44; dir = 'resnet18_exp3_s44'; epochs = 200 }
 )
+
+# Memory gate. Free physical memory must be at least this much before we
+# launch. Rationale: on 2026-09-24 the training died with
+#   torch.AcceleratorError: CUDA error: out of memory
+# while 7 GB of VRAM was FREE -- i.e. it was host memory / WDDM that failed,
+# not VRAM. Free physical was 0.6 GB and commit was 1.46 GB at the time.
+$MIN_FREE_PHYS_MB = 1500
 
 function Write-Log($msg) {
     $line = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + '  ' + $msg
@@ -44,25 +74,44 @@ function Get-TrainingProcess {
         Where-Object { $_.CommandLine -like '*task_extension6_deep_robust_train.py*' }
 }
 
+function Get-FreePhysicalMB {
+    try {
+        $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+        return [int]($os.FreePhysicalMemory / 1KB)
+    } catch { return -1 }
+}
+
+# (1) Completion is judged by the ARTIFACT, never by "the process exited".
+function Test-RunComplete($r) {
+    $mf = Join-Path $outRoot ($r.dir + '\metrics.json')
+    if (-not (Test-Path $mf)) { return $false }
+    try {
+        $j = Get-Content -Raw -Path $mf -Encoding UTF8 | ConvertFrom-Json
+        return ([int]$j.total_epochs -eq [int]$r.epochs)
+    } catch { return $false }
+}
+
 Write-Log ('=== watchdog started (pid ' + $PID + ') ; repo=' + $repo + ' ===')
 
-# 连续缺席计数：会话链是 `run3 && run4`，两条命令之间有一瞬间没有 python 进程。
-# 若只看 1 次采样，watchdog 可能趁那一秒插进去启动 run4，
-# 而会话链同时也会启动 run4 => 两个训练同时跑 = 红线 1（GPU 串行）。
-# 链路切换的间隙 <1 秒，5 分钟的阈值远大于它 => 不会误判。
-$lastState   = ''
-$absentCount = 0
-$ABSENT_NEEDED = 5
+$lastState          = ''
+$absentCount        = 0
+$ABSENT_NEEDED      = 5      # consecutive absences (x60s) before we take over
+$consecutiveCrashes = 0
 
+# Why 5 consecutive checks: the chain is `run3 && run4`; there is a brief
+# instant between the two commands with no python process. A single sample
+# could make the watchdog slip in and start run4 while the chain also starts
+# run4 => two trainings at once = RED LINE 1 (GPU must be serial).
+# The gap is <1 s; the 5-minute threshold is far larger, so no false positive.
 while ($true) {
-    # (1) 全部跑完 -> 退出
-    $missing = @($runs | Where-Object { -not (Test-Path (Join-Path $outRoot ($_.dir + '\metrics.json'))) })
+    # (A) all runs complete -> exit
+    $missing = @($runs | Where-Object { -not (Test-RunComplete $_) })
     if ($missing.Count -eq 0) {
-        Write-Log 'all runs have metrics.json; watchdog exits normally'
+        Write-Log 'all runs have valid metrics.json (total_epochs ok); watchdog exits normally'
         break
     }
 
-    # (2) 有训练在跑 -> 不干预
+    # (B) a training is running -> leave it alone
     $alive = @(Get-TrainingProcess)
     if ($alive.Count -gt 0) {
         $absentCount = 0
@@ -72,7 +121,7 @@ while ($true) {
         continue
     }
 
-    # (3) 没看到训练进程 -> 先等够 5 分钟再动手
+    # (C) no training seen -> wait for the threshold first
     $absentCount++
     if ($absentCount -lt $ABSENT_NEEDED) {
         Write-Log ('no training process seen (' + $absentCount + '/' + $ABSENT_NEEDED + ') - keep watching')
@@ -80,15 +129,35 @@ while ($true) {
         continue
     }
 
-    # (4) 连续缺席确认 -> 接手补齐
+    # (D) confirmed gone -> take over
     Write-Log ('!! training gone for ' + $ABSENT_NEEDED + ' consecutive checks; ' + $missing.Count + ' run(s) left => taking over')
     $absentCount = 0
+
+    # (4) memory gate -- do NOT launch into a memory-starved machine
+    $fp = Get-FreePhysicalMB
+    if ($fp -ge 0 -and $fp -lt $MIN_FREE_PHYS_MB) {
+        Write-Log ('!! memory gate: free physical = ' + $fp + ' MB (< ' + $MIN_FREE_PHYS_MB + ' MB) -> NOT launching; will re-check in 5 min')
+        Start-Sleep -Seconds 300
+        continue
+    }
+    Write-Log ('memory gate ok: free physical = ' + $fp + ' MB')
+
+    # (3) backoff after consecutive crashes
+    if ($consecutiveCrashes -gt 0) {
+        $wait = [int][Math]::Min(1800, 120 * [Math]::Pow(2, $consecutiveCrashes - 1))
+        Write-Log ('backoff: ' + $consecutiveCrashes + ' consecutive crash(es) -> sleeping ' + $wait + ' s before retry')
+        Start-Sleep -Seconds $wait
+        if ((Get-FreePhysicalMB) -lt $MIN_FREE_PHYS_MB) {
+            Write-Log 'backoff done but memory still low -> loop back without launching'
+            continue
+        }
+    }
+
     Start-Sleep -Seconds 30
 
     foreach ($r in $runs) {
-        $mf = Join-Path $outRoot ($r.dir + '\metrics.json')
-        if (Test-Path $mf) {
-            Write-Log ('  skip seed ' + $r.seed + ' (metrics.json exists)')
+        if (Test-RunComplete $r) {
+            Write-Log ('  skip seed ' + $r.seed + ' (metrics.json valid, total_epochs=' + $r.epochs + ')')
             continue
         }
         Write-Log ('  launching seed ' + $r.seed + ' -> ' + $r.dir)
@@ -97,19 +166,20 @@ while ($true) {
             '--dataset', 'cifar100',
             '--model',   'resnet18',
             '--variant', 'exp3',
-            '--epochs',  '200',
+            '--epochs',  "$($r.epochs)",
             '--seed',    "$($r.seed)",
             '--tag',     "_s$($r.seed)"
         )
         $env:PYTHONIOENCODING = 'utf-8'
-        # !! 必须重定向输出 !! （2026-09-24 实修）
-        # 首版漏了这一步，后果：16:37 那次真实接手里，重启的训练输出全部丢失，
-        # `logs_v7_m4_train_part2.log` 停在崩溃前的内容 —— 监控者会以为训练没在跑。
-        # 训练本身没受影响（GPU 96%、best_model.pth 在更新），但可见性没了。
+        # Output MUST be redirected. v1 forgot this, so on 2026-09-24 the first
+        # real takeover produced no visible output at all and
+        # logs_v7_m4_train_part2.log stayed frozen at the pre-crash content --
+        # which made a healthy training look dead to every monitor.
         $runLog = Join-Path $repo ('logs_v7_m4_restart_s' + $r.seed + '.log')
         $runErr = Join-Path $repo ('logs_v7_m4_restart_s' + $r.seed + '.err')
-        # 用 Start-Process 而不是 & 调用：让训练不在 watchdog 的进程树里，
-        # 这样 watchdog 万一被杀，训练也活着（这正是本脚本存在的理由）
+        # Start-Process (not &) so the training is NOT in the watchdog's process
+        # tree -- if the watchdog dies, the training survives. That is the whole
+        # point of this script.
         try {
             $spArgs = @{
                 FilePath               = $py
@@ -122,12 +192,25 @@ while ($true) {
                 RedirectStandardError  = $runErr
             }
             Start-Process @spArgs
-            Write-Log ('  seed ' + $r.seed + ' finished (stdout -> ' + $runLog + ')')
         } catch {
             Write-Log ('  !! launch failed for seed ' + $r.seed + ': ' + $_.Exception.Message)
+            $consecutiveCrashes++
+            break
+        }
+
+        # (2) THE FIX: re-check the ARTIFACT after the launch returns.
+        # "process exited" is NOT "run finished" -- a crash exits too.
+        if (Test-RunComplete $r) {
+            Write-Log ('  seed ' + $r.seed + ' COMPLETED (metrics.json present, total_epochs=' + $r.epochs + ')')
+            $consecutiveCrashes = 0
+        } else {
+            $consecutiveCrashes++
+            Write-Log ('  !! seed ' + $r.seed + ' did NOT complete (no valid metrics.json) -> CRASH, not completion.' +
+                       ' Aborting this chain; consecutive crashes = ' + $consecutiveCrashes)
+            break    # do NOT move on to the next run -- that is exactly the v1 bug
         }
     }
-    Write-Log 'catch-up chain done; back to watching'
+    Write-Log 'catch-up chain finished; back to watching'
     Start-Sleep -Seconds 60
 }
 Write-Log '=== watchdog exited ==='
