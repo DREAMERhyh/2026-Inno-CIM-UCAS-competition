@@ -1,0 +1,56 @@
+{
+  "script": "v7_readout_capacity.py",
+  "argv": [
+    "v7_readout_capacity.py"
+  ],
+  "device": "cpu",
+  "backbone_ckpt": "./checkpoints_cifar100\\simple_cnn\\best_model.pth",
+  "alphas": [
+    0.0,
+    0.3,
+    0.5
+  ],
+  "n_train": 8000,
+  "n_test": 10000,
+  "torch_arms": [
+    "torch_linear",
+    "mlp_bneck_32",
+    "mlp_2layer_256"
+  ],
+  "epochs_grid": [
+    50,
+    150
+  ],
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "knn_k": 20,
+  "anchor": "torch_linear（公平锚，与 MLP 同族）",
+  "delta_proc_source": "outputs_cifar100\\v7_etf_readout\\proc_sensitivity.csv",
+  "delta_proc_pp": 3.45,
+  "chosen_epochs": {
+    "+0.0": {
+      "torch_linear": 50,
+      "mlp_bneck_32": 50,
+      "mlp_2layer_256": 50
+    },
+    "+0.3": {
+      "torch_linear": 50,
+      "mlp_bneck_32": 150,
+      "mlp_2layer_256": 50
+    },
+    "+0.5": {
+      "torch_linear": 150,
+      "mlp_bneck_32": 150,
+      "mlp_2layer_256": 50
+    }
+  },
+  "decimals": 4,
+  "verdict_branch": "③",
+  "verdict_detail": "knn_k20: +0.3 增益 -13.35pp (seed std ±0.00), clean 代价 +11.27pp; mlp_bneck_32: +0.3 增益 -8.09pp (seed std ±0.46), clean 代价 +8.38pp; mlp_2layer_256: +0.3 增益 -2.85pp (seed std ±0.21), clean 代价 +2.54pp ⇒ 线性已是本设置的容量天花板",
+  "git_commit": "76179386aad6cb0f76280d6cc1593b4ad591257b",
+  "torch": "2.10.0+cu126",
+  "numpy": "2.1.3"
+}

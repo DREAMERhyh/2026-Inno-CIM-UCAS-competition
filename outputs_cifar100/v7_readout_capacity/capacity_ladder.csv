@@ -1,0 +1,4 @@
+alpha,logreg_C0.01,linear,knn_k20,torch_linear,mlp_bneck_32,mlp_2layer_256,torch_linear_epochs,mlp_bneck_32_epochs,mlp_2layer_256_epochs,torch_linear_seed_std,mlp_bneck_32_seed_std,mlp_2layer_256_seed_std
+0.0,55.93,53.22,45.06,56.3267,47.9433,53.7867,50,50,50,0.0386,0.4717,0.1484
+0.3,49.23,48.25,38.12,51.4733,43.38,48.62,50,150,50,0.1096,0.4598,0.2061
+0.5,34.66,36.86,24.64,38.4833,32.96,36.6933,150,150,50,0.091,0.2902,0.4321
