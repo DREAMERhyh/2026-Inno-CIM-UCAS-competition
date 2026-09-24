@@ -147,6 +147,8 @@ claude --bg --allowedTools="Bash,Read,Write,Edit,Glob,Grep" "<简报>"
 | **内存余量薄** | 实测：物理 15.7 GB / 可用约 3.7 GB；提交 48.15 GB / 可用约 9.32 GB；页面文件 32.45 GB（峰值 7.41 GB）。读数随负载波动很大（事故当时是 0.9 / 4.9 GB） | 开新任务前先看提交内存；**不要同时开多个吃内存的活** |
 | 🔴 **不要在 `.tex` 里混写 markdown 语法** | **本阶段踩过三次**（均 claude-e9 犯）。两种残留的失效方式不同：<br>· **反引号**：LaTeX 里是开引号 → 首次踩时编译报 6 个错（`Missing $ inserted`、`Extra alignment tab`）<br>· **`**加粗**`**：`*` 在文本模式只是普通字符 → **完全不报错，静默渲染成字面的星号**（第三次踩，journal 6 处 + technical-report 1 处） | 编辑 `.tex` **一律只用 LaTeX 宏**（`\textbf{}` / `\texttt{}`）。<br>**但不要靠记性**——手动检查已验证会漏（第三次仍漏 1 处）。<br>⇒ **提交 `paper/` 之前必须跑 `tools/check_papers.py`**（退出码 0 才提交）。它做四件事：扫 markdown 残留 + 编译两遍 + 数错误 + 数未定义引用。 |
 | ⚠ **"先编译后提交"必须检查编译结果** | 实测踩过：我把 `xelatex` 与 `git commit` 写在同一条命令里，`xelatex` 报了 6 个错、提交照样执行了 —— **把一个编译不过的版本提交了** | **提交前显式确认 `grep -c '^!' main.log` 为 0**，不要靠"跑过编译"就当作通过了 |
+| 🔴 **`v3_readout_repair` 的 `--backbone_tag` 命名会骗人** | 实测（M4 准备工作时查出）：`readout_repair_c100_exp2_vgg11_s4{2,3,4}_ep24_*.csv` 三个文件的 `a_original_fc` **全是 68.05/15.98** —— **同一个 s42 主干**，它们变的只是**读出种子**。但 tag 里写着 `s43`/`s44`，**读起来像"主干种子 43/44"**。而 M4 新训的 s43 主干 best = **67.86**（不同） | **新主干一律用 `bs<seed>`（backbone seed）区分**，如 `exp2_vgg11_bs43_ep24`。**不要用 `s43`**（那个已被读出种子占用）。核验手段：跑完读出后，`a_original_fc` 在 α=0 的值必须等于该主干 `metrics.json` 的 `best_test_acc` |
+| **M4 的实际耗时比初估长** | VGG-11/Exp2 120ep 实测 **110 分钟/次**（初估按冒烟的 52s/epoch 外推为 ~60 分钟；实际稳态变慢）。4 次串行 ⇒ 总时长按 ~9 小时估更稳 | 排期按实测值，不要按冒烟外推 |
 | **新产物不会自动进台账** | `build_ledger.py` 的 ext6 收割读的是固定的 `alpha_wide_scan_deep_robust.csv` 与 `{model}/metrics.json`，**不 glob 带 `_s43` 后缀的目录** | 汇总台账时需扩展收割器或手工补行（记在 §六） |
 | **`\` 在 Python heredoc 里会被吞** | 用 heredoc 批量改写 `.tex`/正则时，`\t` `\b` 会被解释成控制字符（本项目实际踩过一次，写坏了标题行） | **不要用字符串替换脚本批量改 LaTeX 源文件**；要改就用编辑工具逐处改 |
 
