@@ -1,0 +1,3 @@
+alpha,n_procedures,delta_proc,argmax_proc,argmin_proc,delta_over_etf_effect,sk_lbfgs,sk_saga,adam_50,adam_150,adam_400,sgd_mom_150
+0.0,6,3.46,adam_50,adam_400,,53.22,54.91,56.31,54.89,52.85,53.27
+0.3,6,3.45,adam_50,sgd_mom_150,11.5,48.25,50.75,51.57,50.37,48.55,48.12

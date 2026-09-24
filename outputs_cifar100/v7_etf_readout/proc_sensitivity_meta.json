@@ -1,0 +1,30 @@
+{
+  "script": "v7_proc_sensitivity.py",
+  "argv": [
+    "v7_proc_sensitivity.py"
+  ],
+  "device": "cpu",
+  "backbone_ckpt": "./checkpoints_cifar100\\simple_cnn\\best_model.pth",
+  "alphas": [
+    0.0,
+    0.3
+  ],
+  "n_train": 8000,
+  "n_test": 10000,
+  "procedures": {
+    "sk_lbfgs": "LogisticRegression(lbfgs, max_iter=1000)",
+    "sk_saga": "LogisticRegression(saga, max_iter=100)",
+    "adam_50/150/400": "Adam lr=1e-3, batch 256",
+    "sgd_mom_150": "SGD lr=0.1 momentum=0.9, 150 ep"
+  },
+  "margin_pp": 1.0,
+  "etf_effect_pp": 0.3,
+  "decimals": 4,
+  "verdict_branch": {
+    "0.0": "①",
+    "0.3": "①"
+  },
+  "verdict_detail": "α=+0.0 Δ_proc=3.46pp ⇒ 分支 ①; α=+0.3 Δ_proc=3.45pp ⇒ 分支 ①",
+  "scope_note": "不是 5.55pp 之谜的实例（优化器/超参本来就不同）；用途是给 §16.3 的阴性结论提供「增益 < 训练过程自由度」的旁证",
+  "git_commit": "c3feea97ac648e991f66dadca65701031c388fd9"
+}
