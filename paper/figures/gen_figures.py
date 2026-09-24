@@ -125,9 +125,12 @@ def f01():
 # =====================================================================
 def f02():
     p("\n[F2] 探针 headroom：信息仍在线性可达范围内")
-    rows = read_csv("outputs_cifar100/v3_probe_info_death/probe_results.csv")
+    # 数据源：第七阶段 M0c 的规范口径重跑（全量 10,000 测试集，CUDA，n_train=8000）。
+    # 旧源 outputs_cifar100/v3_probe_info_death/probe_results.csv 是 8k 子集口径，
+    # 其 headroom +20.12 已在 M0c 中被全量口径的 +20.26 取代（见 docs/IMPL_AUDIT.md）。
+    rows = read_csv("outputs_cifar100/v7_probe_audit/ra_onprotocol_main.csv")
     if not rows:
-        p("  !! 缺 probe_results.csv")
+        p("  !! 缺 v7_probe_audit/ra_onprotocol_main.csv")
         return
     idx = {-0.3: None, -0.2: None, -0.1: None, 0.0: None,
            0.1: None, 0.2: None, 0.3: None}
