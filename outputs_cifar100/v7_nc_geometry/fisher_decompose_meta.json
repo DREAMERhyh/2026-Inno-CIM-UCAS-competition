@@ -1,0 +1,22 @@
+{
+  "script": "v7_fisher_decompose.py",
+  "argv": [
+    "v7_fisher_decompose.py"
+  ],
+  "device": "cpu",
+  "backbone_ckpt": "./checkpoints_cifar100\\simple_cnn\\best_model.pth",
+  "abs_alphas": [
+    0.1,
+    0.2,
+    0.3,
+    0.4,
+    0.5
+  ],
+  "n_test": 10000,
+  "identity_tol": 1e-09,
+  "decimals": 4,
+  "verdict_branch": "②",
+  "verdict_detail": "5/5 由类内散布主导且 dlogSw<0（5/5）⇒ Fisher 不对称由类内散布主导",
+  "scope_note": "只描述 Fisher 不对称的来源；不修改 §13.6 的维度丢失叙述，也不改 §16.2 分支②",
+  "git_commit": "27384003bb9755d7208d44c8786a73bcf742b23f"
+}
