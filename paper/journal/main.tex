@@ -927,6 +927,54 @@ B 训出的\textbf{六个} run 全部落在 $26.58\pm0.29$，两者相差 \textb
 这条结论的实践含义是硬的：\textbf{部署校准必须与部署训练同实现、同路径}；
 跨实现引用精度数字——包括与文献对比——都是无效的。
 
+\paragraph{一个更实用的刻度：三级可分辨性。}
+上面那条"跨实现不可移植"是一个\textbf{已知未知}，无法直接当门槛用。
+但它旁边有两级\textbf{可以测准}的散布，合起来给出一个可操作的判断尺度：
+
+\begin{center}
+\small
+\begin{tabular}{llc}
+\toprule
+层级 & 变的是什么 & 实测幅度 \\
+\midrule
+① 种子噪声 & 同一过程重复 & 尾部 $\pm0.39\sim3.40$；clean $\pm0.07\sim1.85$ \\
+\textbf{② 过程自由度} & \textbf{同数据、同特征、同架构，只换拟合过程} & \textbf{3.45 pp} \\
+③ 跨实现 & 同超参同种子，实现不同 & 5.55 pp（\textbf{未归因}）\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+第 ② 级是这样测的：在\textbf{同一批冻结特征}上训同一个线性头，只换六种拟合过程
+（sklearn 的 lbfgs / saga；torch 的 Adam 在 50 / 150 / 400 轮；SGD+动量 150 轮），
+$\alpha=0$ 与 $+0.3$ 上各跑一遍。结果：
+
+\begin{center}
+\small
+\begin{tabular}{lcccccc}
+\toprule
+拟合过程 & sklearn lbfgs & sklearn saga & Adam 50 & Adam 150 & Adam 400 & SGD+mom 150 \\
+\midrule
+$\alpha=0$ & 53.22 & 54.91 & \textbf{56.31} & 54.89 & \textbf{52.85} & 53.27 \\
+$\alpha=+0.3$ & 48.25 & 50.75 & \textbf{51.57} & 50.37 & 48.55 & \textbf{48.12} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+⇒ \textbf{极差 $\Delta_{\text{proc}} = 3.45\sim3.46$ pp。} 同数据、同特征、同架构、同一个线性头，
+\textbf{只换"怎么把它拟合出来"，就能差 3.45 个百分点。}
+
+\textbf{这里有一个反直觉的细节值得单独记}：$\alpha=0$ 的最大值与最小值
+\textbf{都来自同一个优化器的不同轮数}（Adam 50 轮最高 56.31、Adam 400 轮最低 52.85）。
+⇒ \textbf{过程自由度的主要来源是"训多久"，不是"用哪个"。}
+（$\alpha=+0.3$ 的最小值出自 SGD+动量，但最大值同样出自 Adam 50 轮。）
+
+\textbf{由此得到一条判断规则}：任何"读出类"效应（换头、加正则、改容量）的可分辨门槛
+\textbf{必须同时以 $\Delta_{\text{proc}}$ 为参照，不能只用种子噪声}——
+因为种子噪声测的是"同一过程重复"的散布，而 $\Delta_{\text{proc}}$ 测的是"换一个过程"的散布，
+\textbf{后者才是接收端口真正面对的那种不确定性}。
+本文第 \ref{sec:gating} 节关于门控增益的每一个比较，其效应量都远大于种子噪声，
+但与 $\Delta_{\text{proc}}$ 同量级——这一点读者在解释那些差值时应当一并考虑。
+
 \section{讨论}
 \label{sec:discussion}
 
