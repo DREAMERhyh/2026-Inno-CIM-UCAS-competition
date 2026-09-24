@@ -489,7 +489,7 @@ max 的选择性 & 换成 top-2 池化（与 $f_\alpha$ 不可交换）
 
 \subsection{两个杠杆的叠加与在线估计}
 
-架构杠杆与读出杠杆在尾部近似正交可叠加：`5$\times$MaxPool 主干 $+$ readout-NAT`
+架构杠杆与读出杠杆在尾部近似正交可叠加：\texttt{5$\times$MaxPool 主干 $+$ readout-NAT}
 的 $\alpha=+0.3$ 达 \textbf{49.12}（比架构单独 $+6.65$、比读出单独 $+5.74$）。
 
 失真强度可由读出特征的岭回归在线恢复：四个主干$\times$数据集组合上

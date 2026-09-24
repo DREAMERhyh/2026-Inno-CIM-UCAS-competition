@@ -343,13 +343,13 @@ headroom 只有 7.00 个百分点。随机扰动与确定性系统误差在"信�
 
 \textbf{第二项自我校验：增益不是"多训了一个分类器"的通用效应。}
 读出适配的全部改动只有最后一层。一个自然的怀疑是：任何重训过的线性头都会带来类似增益，
-与"在哪种分布上训练"无关。**这个对照本来就在数据里**——
-`v3_readout_repair` 的产物文件里每个权重都带有多个读出臂，
+与"在哪种分布上训练"无关。\textbf{这个对照本来就在数据里}——
+\texttt{v3\_readout\_repair} 的产物文件里每个权重都带有多个读出臂，
 其中 \texttt{b\_clean\_fit\_linear} 是\textbf{在干净分布上重训同一个线性头}：
 
 \begin{center}
 \small
-\begin{tabular}{llccc}
+\begin{tabular}{llcccc}
 \toprule
 主干 & 原始头 & \textbf{在干净分布上重训} & $\Delta$ & 本文方法 & $\Delta$ \\
 \midrule
@@ -361,7 +361,7 @@ ResNet-18 & 6.22 & \textbf{5.38} & $-0.84$ & 26.82 & $+20.60$ \\
 \end{center}
 
 （$\alpha=+0.3$ 精度，CIFAR-100，各 3 seed，24 epoch 读出；
-出处：`outputs\_cifar100/v3\_readout\_repair/*ep24*.csv` 的 \texttt{a\_original\_fc}
+出处：\texttt{outputs\_cifar100/v3\_readout\_repair/*ep24*.csv} 的 \texttt{a\_original\_fc}
 与 \texttt{b\_clean\_fit\_linear} 两行。）
 
 \textbf{b 在三个主干上全部零增益，其中两个还是负的}（$+0.26$ / $-0.17$ / $-0.84$）。
