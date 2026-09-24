@@ -417,13 +417,14 @@ ResNet-18 & 6.22 & \textbf{5.38} & $-0.84$ & 26.82 & $+20.60$ \\
 
 （$\alpha=+0.3$ 精度，CIFAR-100，各 3 seed，24 epoch 读出；
 出处：\texttt{outputs\_cifar100/v3\_readout\_repair/*ep24*.csv} 的 \texttt{a\_original\_fc}
-与 \texttt{b\_clean\_fit\_linear} 两行。）
+与 \texttt{b\_clean\_fit\_linear} 两行。\textbf{表中为 3 个种子的均值}——
+CSV 存的是逐 seed 的行，均值需自行合成，算式登记在 \texttt{docs/DERIVED\_VALUES.md}。）
 
 \textbf{b 在三个主干上全部零增益，其中两个还是负的}（$+0.26$ / $-0.17$ / $-0.84$）。
 ⇒ 起作用的不是"换了一个头"，而是\textbf{头是在哪种分布上训练的}。
 
 （同一批文件里还有一个 \texttt{c\_dist\_fit\_linear} 臂——把读出拟合到失真的窄分布上。
-它在 $\alpha=+0.3$ 上更高（52.16 / 58.98 / 47.40），但\textbf{干净精度崩掉}：
+它在 $\alpha=+0.3$ 上更高（52.16 / 58.98 / 47.40，同为主干内 3 seed 均值），但\textbf{干净精度崩掉}：
 ResNet-18 从 72.69 掉到 \textbf{15.53}。这是"再分配"的极端形态，也正是本文方法选择
 在整个 $\alpha\sim U[\pm0.3]$ 区间上训练的原因。
 \textbf{注意}：该臂是 24\,ep / 3 seed 口径，与上文引用的单点适配读数 52.79 来自不同轮次，
