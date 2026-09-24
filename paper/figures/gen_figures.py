@@ -186,7 +186,10 @@ def f03():
                       for s, sfx in ((42, ""), (43, "_s43"), (44, "_s44"))],
     }
     colors = [WONG[6], WONG[5], WONG[3]]
-    fig, ax = plt.subplots(figsize=(5.6, 3.5))
+    # 高度 3.5 → 3.05：图例外移后总高会涨，压低绘图区把长宽比拉回原值（1.625 → 约 1.5），
+    # 免得 .tex 里同一 width 下这张图比原来高两成、顶掉浮动体位置
+    fig, ax = plt.subplots(figsize=(5.6, 3.05))
+    h_nat, h_orig = [], []      # 图例顺序：先三条实线、再三条虚线，2 列时正好逐主干成对
     for (name, files), c in zip(groups.items(), colors):
         orig = [readout_curve(f, "a_original_fc") for f in files]
         nat = [readout_curve(f, "e_readout_NAT") for f in files]
@@ -197,17 +200,28 @@ def f03():
             continue
         a0, m0, s0 = seed_mean(orig)
         a1, m1, s1 = seed_mean(nat)
-        ax.plot(a0, m0, "o--", color=BASE, lw=1.2, ms=3.5, alpha=0.9)
-        ax.plot(a1, m1, "o-", color=c, lw=1.8, ms=4, label=f"{name}·readout-NAT")
+        # ±1 总体标准差阴影（值来自同一 CSV，未引入新取数）
+        ax.fill_between(a1, m1 - s1, m1 + s1, color=c, alpha=0.13, lw=0)
+        # 原头虚线改成**与对应主干同色**：原先三条共用一条灰虚线，读者无法逐主干配对
+        h1, = ax.plot(a0, m0, "o--", color=c, lw=1.1, ms=3.5, alpha=0.7,
+                      label=f"{name}·原始分类头")
+        h2, = ax.plot(a1, m1, "o-", color=c, lw=1.8, ms=4, label=f"{name}·读出适配")
+        h_nat.append(h2)
+        h_orig.append(h1)
         i3 = a1.index(0.3)
-        ax.annotate(f"{m1[i3]:.1f}±{s1[i3]:.2f}", (0.3, m1[i3]), xytext=(4, 4),
+        ax.annotate(f"{m1[i3]:.1f}±{s1[i3]:.2f}", (0.3, m1[i3]), xytext=(6, 4),
                     textcoords="offset points", fontsize=7.5, color=c)
         p(f"  {name:10s} 原头@+0.3={m0[a0.index(0.3)]:.2f}  NAT@+0.3={m1[i3]:.2f}±{s1[i3]:.2f}"
           f"  NAT clean={m1[a1.index(0.0)]:.2f}±{s1[a1.index(0.0)]:.2f}")
-    ax.plot([], [], "o--", color=BASE, lw=1.2, ms=3.5, label="原始分类头")
     ax.set_xlabel(r"失真强度 $\alpha$")
     ax.set_ylabel("测试精度 (%)")
-    ax.legend(frameon=False, fontsize=7.5, loc="upper left", ncol=2)
+    # 右侧留白，让 +0.3 的三个 ±标注落在坐标框内（原先贴着右边框）
+    ax.set_xlim(-0.355, 0.40)
+    # 图例移到**坐标框外下方**：6 条目（3 主干 × 2 头）留在框内会压住中部曲线。
+    # 按主干交错排列：matplotlib 图例按**列**填充，ncol=3 时每列正好是一对（实线/虚线）
+    ax.legend(handles=[h for pair in zip(h_nat, h_orig) for h in pair],
+              frameon=False, fontsize=7,
+              loc="upper center", bbox_to_anchor=(0.5, -0.17), ncol=3)
     save(fig, "F03_readout_nat")
 
 
@@ -246,9 +260,15 @@ def f04():
     ax.invert_yaxis()
     ax.set_xlabel(r"$\alpha=+0.3$ 相对均匀采样基准的差值 (pp)")
     for yi, d in zip(y, deltas):
-        ax.annotate(f"{d:+.2f}", (d, yi), xytext=(4 if d >= 0 else -4, 0),
-                    textcoords="offset points", va="center",
-                    ha="left" if d >= 0 else "right", fontsize=8)
+        if d >= 0:
+            ax.annotate(f"{d:+.2f}", (d, yi), xytext=(4, 0), textcoords="offset points",
+                        va="center", ha="left", fontsize=8)
+        else:
+            # 负向棒：标注放到**棒内**右端，白字。原先放在棒左端外侧，
+            # 与 y 轴刻度标签相撞，−6.47 的负号被压掉。
+            ax.annotate(f"{d:+.2f}", (d, yi), xytext=(6, 0), textcoords="offset points",
+                        va="center", ha="left", fontsize=8, color="white")
+    ax.set_xlim(min(deltas) - 0.35, max(deltas) + 0.55)
     save(fig, "F04_training_paths")
 
 
@@ -321,12 +341,16 @@ def f06():
         p(f"  {name:10s} 秩损失={loss:.1f}%  恢复率={rec:.1f}%")
 
     if len(pts) >= 2:
-        fig, ax = plt.subplots(figsize=(4.8, 3.4))
+        # 高度 3.4 → 3.2：轴范围留白后总高微涨，压低绘图区抵消（比例 1.396 → 约 1.40）
+        fig, ax = plt.subplots(figsize=(4.8, 3.2))
         xs = [q[0] for q in pts]
         ys = [q[1] for q in pts]
         ax.plot(xs, ys, "o-", color=WONG[5], lw=1.6, ms=7)
         for x_, y_, n_ in pts:
             ax.annotate(n_, (x_, y_), xytext=(6, 4), textcoords="offset points", fontsize=8)
+        # 四周留白：原先 SimpleCNN 的标注压在上边框、ResNet-18 的越出右边框
+        ax.set_xlim(min(xs) - 4, max(xs) + 7)
+        ax.set_ylim(min(ys) - 6, max(ys) + 6)
         r = np.corrcoef(xs, ys)[0, 1]
         ax.set_xlabel("有效秩损失 @ $\\alpha=+0.3$ (%)")
         ax.set_ylabel("读出恢复率 @ $\\alpha=+0.3$ (%)")
@@ -339,8 +363,9 @@ def f06():
 # =====================================================================
 def f07():
     p("\n[F7] 池化密度 2→5（零训练成本）")
-    pairs = [("2×MaxPool（异协议锚点）", "outputs_cifar100/task1_simplecnn/alpha_sensitivity.csv", BASE, "--"),
-             ("5×MaxPool", "outputs_cifar100/v3_methods/simple_cnn_mp_clean_uniform/alpha_sensitivity.csv", WONG[6], "-")]
+    # 图例直接写明各自的协议，让"异协议锚点"在**图内**就自我说明（原先只在图注里说）
+    pairs = [("2×MaxPool（第一阶段 100 ep，仅作锚点）", "outputs_cifar100/task1_simplecnn/alpha_sensitivity.csv", BASE, "--"),
+             ("5×MaxPool（第三阶段 120 ep）", "outputs_cifar100/v3_methods/simple_cnn_mp_clean_uniform/alpha_sensitivity.csv", WONG[6], "-")]
     fig, ax = plt.subplots(figsize=(5.4, 3.4))
     for lab, rel, c, ls in pairs:
         a, v = alpha_curve(rel)
@@ -401,11 +426,33 @@ def f08():
     fig, ax = plt.subplots(figsize=(5.4, 3.6))
     ax.axhline(0, color=BASE, lw=1.0, ls="--")
     ax.axvline(0, color=BASE, lw=0.6, ls=":")
-    for x_, y_, lab, c in data:
-        ax.scatter(x_, y_, s=60, color=c, zorder=3, edgecolor="white", linewidth=0.6)
-        ax.annotate(lab, (x_, y_), xytext=(6, 4), textcoords="offset points", fontsize=7.5)
     xs = [d[0] for d in data]
     ys = [d[1] for d in data]
+    xmid = (min(xs) + max(xs)) / 2
+    # C10/mp 三个主干种子几乎重合 → 用三种标记画，**只标一次**（原先三个标签叠印成乱码）
+    mk = ["o", "s", "^"]
+    seeds = [d for d in data if d[2].startswith("C10/mp s")]
+    singles = [d for d in data if not d[2].startswith("C10/mp s")]
+    for i, (x_, y_, lab, c) in enumerate(seeds):
+        ax.scatter(x_, y_, s=55, color=c, zorder=3, marker=mk[i % 3],
+                   edgecolor="white", linewidth=0.6)
+    if seeds:
+        cx = sum(d[0] for d in seeds) / len(seeds)
+        cy = sum(d[1] for d in seeds) / len(seeds)
+        # 引线指向左下方，标签落在 VGG-11/Exp2（更高）与 C10/plain（更低）之间
+        ax.annotate("C10/mp（3 个主干种子）", (cx, cy), xytext=(-13, 11),
+                    textcoords="offset points", fontsize=7.5, ha="right",
+                    arrowprops=dict(arrowstyle="-", color=BASE, lw=0.7))
+    for x_, y_, lab, c in singles:
+        ax.scatter(x_, y_, s=60, color=c, zorder=3, edgecolor="white", linewidth=0.6)
+        # 最右的点（C10/plain）标注放**正下方**：向左标会靠近 C10/mp 那一簇，易误读
+        if x_ > xmid:
+            ax.annotate(lab, (x_, y_), xytext=(0, -15), textcoords="offset points",
+                        fontsize=7.5, ha="center")
+        else:
+            ax.annotate(lab, (x_, y_), xytext=(6, 4), textcoords="offset points",
+                        fontsize=7.5, ha="left")
+    ax.set_xlim(min(xs) - 0.30, max(xs) + 0.30)
     ax.set_xlabel("鲁棒头的 clean 代价 (pp)")
     ax.set_ylabel("门控红利 mean7 (pp)")
     ax.set_title(f"七个点，逐点 Pearson $r = {np.corrcoef(xs, ys)[0, 1]:.3f}$", fontsize=9)
@@ -425,18 +472,24 @@ def f09():
     ys = np.arange(len(rows))
     for i, r in enumerate(rows):
         v3, t2 = float(r["v3pos"]), float(r["t2pos"])
-        ax.annotate("", xy=(v3, i), xytext=(t2, i),
-                    arrowprops=dict(arrowstyle="-", color=BASE, lw=1.0))
-        ax.scatter(v3, i, s=45, marker="o", color=WONG[5], zorder=3,
-                   label="v3 评估路径" if i == 0 else None)
-        ax.scatter(t2, i, s=45, marker="s", color=WONG[6], zorder=3,
-                   label="task2 评估路径" if i == 0 else None)
+        # 两条路径读数**逐位相同** ⇒ 原先是"方点盖住圆点"，图上只剩一种标记，
+        # 读者看到的是"圆点缺失 + 图例对不上"。改成"空心大圆环 + 实心方点"：
+        # 方点在环内，两种标记同时可见，视觉上直接表达"重合"。
+        ax.scatter(t2, i, s=42, marker="s", color=WONG[6], zorder=3,
+                   label="task2 路径（实心方）" if i == 0 else None)
+        ax.scatter(v3, i, s=150, marker="o", facecolors="none",
+                   edgecolors=WONG[5], linewidths=1.3, zorder=4,
+                   label="v3 路径（空心环，重合）" if i == 0 else None)
         p(f"  {r['weight']:22s} v3={v3:.2f}  task2={t2:.2f}  差={v3 - t2:+.4f}")
     ax.set_yticks(ys)
     ax.set_yticklabels([r["weight"] for r in rows], fontsize=7.5)
     ax.invert_yaxis()
     ax.set_xlabel(r"$\alpha=+0.3$ 测试精度 (%)")
-    ax.legend(frameon=False, fontsize=8, loc="lower right")
+    # 图例放**左下**（该区无数据：最后两行都靠右），并缩短条目；
+    # lower right 会压住右下数据点，upper left 会压住左上数据点。
+    ax.set_xlim(min(float(r["v3pos"]) for r in rows) - 0.35,
+                max(float(r["v3pos"]) for r in rows) + 0.45)
+    ax.legend(frameon=False, fontsize=7.5, loc="lower left")
     save(fig, "F09_crosspath")
 
 
@@ -456,9 +509,12 @@ def f10():
     ax.plot(b, acc, "o-", color=WONG[5], lw=1.8, ms=5)
     ax.axhline(base, color=BASE, lw=1.0, ls="--", label=f"8bit 基线 {base:.2f}%")
     peak = max(range(len(acc)), key=lambda i: acc[i])
+    # 注解放到右下空白区（原先 (8,-26) 落在 4→5 的下降线上，文字被曲线穿过）。
+    # 引线用灰色而非橙色：橙色引线与曲线同色时会被误读成第二段数据线。
     ax.annotate(f"4bit: {acc[b.index(4)]:.2f}%\n(+{acc[b.index(4)] - base:.2f} pp)",
-                (4, acc[b.index(4)]), xytext=(8, -26), textcoords="offset points", fontsize=8,
-                arrowprops=dict(arrowstyle="->", color=WONG[6], lw=1.0), color=WONG[6])
+                (4.02, acc[b.index(4)] - 0.15), xytext=(4.2, 12.9), textcoords="data",
+                fontsize=8, ha="left", va="center", color=WONG[6],
+                arrowprops=dict(arrowstyle="->", color=BASE, lw=1.0))
     ax.set_xlabel("ADC 量化位宽 (bit)")
     ax.set_ylabel("测试精度 (%)")
     ax.legend(frameon=False, fontsize=8)
@@ -487,11 +543,14 @@ def f11():
         p("  !! 缺 simple_cnn/clean")
         return
     fig, ax = plt.subplots(figsize=(5.4, 3.4))
-    for wt, lab, c in [("nat_scratch", "NAT-scratch", WONG[6]),
-                       ("nat_finetune", "NAT-finetune", WONG[5])]:
+    # 两条线除颜色外再加线型/标记区分（灰度打印与色觉障碍下仍可分）
+    styles = [("nat_scratch", "NAT-scratch", WONG[6], "-", "o"),
+              ("nat_finetune", "NAT-finetune", WONG[5], "--", "s")]
+    for wt, lab, c, ls, mk in styles:
         cur = curve(wt)
         xs = sorted(set(cur) & set(clean))
-        ax.plot(xs, [cur[x] - clean[x] for x in xs], "o-", color=c, lw=1.6, ms=4, label=lab)
+        ax.plot(xs, [cur[x] - clean[x] for x in xs], marker=mk, ls=ls, color=c,
+                lw=1.6, ms=4, label=lab)
         for x in xs:
             if abs(x) >= 0.4 and x > 0:
                 p(f"  {lab:14s} α={x:+.2f}  Δ={cur[x] - clean[x]:+.2f}")
@@ -504,7 +563,8 @@ def f11():
                 textcoords="offset points", fontsize=7.5, color=BASE)
     ax.set_xlabel(r"失真强度 $\alpha$")
     ax.set_ylabel("相对 clean 的增益 (pp)")
-    ax.set_title("SimpleCNN / CIFAR-10", fontsize=9)
+    # 标题写明横轴范围：本图 ±0.6/15 点，与其余各图的 ±0.3/7 点不同（原先只在图注说数据集不同）
+    ax.set_title("SimpleCNN / CIFAR-10（横轴 ±0.6，15 点）", fontsize=9)
     ax.legend(frameon=False, fontsize=8)
     save(fig, "F11_extrapolation")
 
