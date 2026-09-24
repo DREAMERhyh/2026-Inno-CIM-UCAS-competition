@@ -77,10 +77,14 @@
 | `outputs_cifar100/v7_probe_audit/` | claude-65 | 只读 |
 | `checkpoints_cifar100/Exp*_s4{3,4}`、`outputs_cifar100/extension6_deep_robust/*_s4{3,4}`、`outputs_cifar100/v3_readout_repair/*s4{3,4}*` | M4 工人（ecf16ce2） | 只读 |
 | `outputs_cifar100/v7_M4_audit/` | M4 工人 | 只读 |
-| `paper/journal/main.tex` | **claude-4c**（本轮独占） | 只读 |
-| `paper/technical-report/**`、`paper/competition/**` | **claude-89**（本轮独占） | 只读 |
-| `paper/` 其余（`figures/`、`coverage-audit.md` 等） | **claude-0b**（总管） | 只读 |
-| `docs/`（除 `docs/verify/`） | **claude-0b**（总管） | 只读 |
+| **`paper/**`（三份稿）** | **claude-a8**（2026-09-24 20:xx 起，做体检后的修复） | 只读 |
+| `paper/` 其余（`coverage-audit.md`、`storyline.md` 等） | **claude-a3**（总管） | 只读 |
+| `docs/`（除 `docs/verify/`） | **claude-a3**（总管） | 只读 |
+
+> ⚠ **上表在 2026-09-24 20:xx 换过一次** —— 原因是**机器在 18:35 重启过**，
+> **重启前的会话（claude-4c / 89 / 65 / 6f / 38 / 0b…）全部不存在了**。
+> **会话名也会变**（总管从 `claude-e9` → `claude-08` → `claude-0b` → **`claude-a3`**）。
+> ⇒ **以 `ListAgents` 的实时列表为准；角色比名字重要。**
 | **`docs/verify/`** | **共享区**——每个会话**只写自己那一个文件**，文件名已在各自简报里写死 | 别人的文件只读 |
 | `results_master.csv` | 由 `build_ledger.py` 重建——**重建前必须确认没有别的会话正在写产物** | — |
 
