@@ -332,13 +332,16 @@ CIFAR-10/SimpleCNN/$|\alpha|=0.3$ 上是 3.4，CIFAR-100 同模型上只有 1.87
 \includegraphics[width=0.76\textwidth]{F02_probe_headroom.pdf}
 \caption{探针 headroom：灾难尾的标签信息仍然线性可达。
 在同一冻结主干的末端特征上，线性探针（实心）与模型自带分类头（空心）的精度；
-7 个 $\alpha$ 点，CIFAR-100 全量测试集、best 权重、单种子。
+7 个 $\alpha$ 点，CIFAR-100 的 \textbf{8000 样本子集}（\textbf{非全量 10\,000}）、best 权重、单种子。
 $\alpha=+0.3$ 时相差 20.12 个百分点；同样的探针在加性高斯噪声 $\sigma=0.3$ 下只有 7.00。
 数据：\texttt{outputs\_cifar100/v3\_probe\_info\_death/probe\_results.csv}。}
 \label{fig:probe}
 \end{figure}
 
-$\alpha=+0.3$ 时探针达 47.89\%、自带头 27.76\%，headroom \textbf{20.12}；
+$\alpha=+0.3$ 时探针达 47.89\%、自带头 27.76\%，headroom \textbf{20.12}%
+\footnote{这两项取自一个 \textbf{8000 样本的测试子集}，\textbf{非全量 10\,000}；该子集下 clean 行为 59.60，
+全量口径为 59.99。因两项同口径，headroom 内部自洽；\S6 已将其记为\textbf{下界}。
+全量口径的重跑列入第七阶段 M0c（CPU，因 GPU 被 M4 占用）。}；
 $\alpha=+0.4$ 时 30.41、$+0.5$ 时 30.38。失真越强 headroom 越大。
 
 \textbf{对照通路的判别力}：同一套探针在加性高斯噪声 $\sigma=0.3$ 下 headroom 只有 7.00。

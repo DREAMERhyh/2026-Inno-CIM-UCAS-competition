@@ -246,14 +246,18 @@ VGG-11 从 67.09 掉到 16.92，ResNet-18 从 72.09 掉到 2.70。
 \includegraphics[width=0.78\textwidth]{F02_probe_headroom.pdf}
 \caption{灾难尾的标签信息仍然线性可达。在同一冻结主干的末端特征上，
 线性探针（实心）与模型自带分类头（空心）的精度对比；7 个 $\alpha$ 点，
-CIFAR-100 全量测试集、best 权重、单种子。
+CIFAR-100 的 \textbf{8000 样本子集}（\textbf{非全量 10\,000}；该口径下 clean 行为 59.60，
+全量口径为 59.99）、best 权重、单种子。
 $\alpha=+0.3$ 时两者相差 20.12 个百分点，且该差距随失真增强而放大。
 作为对照，同一套探针在加性高斯噪声（$\sigma=0.3$）上只有 7.00 个百分点。
 数据：\texttt{outputs\_cifar100/v3\_probe\_info\_death/probe\_results.csv}。}
 \label{fig:probe}
 \end{figure}
 
-$\alpha=+0.3$ 时探针达 47.89\%，自带头只有 27.76\%，headroom 为 \textbf{20.12} 个百分点；
+$\alpha=+0.3$ 时探针达 47.89\%，自带头只有 27.76\%，headroom 为 \textbf{20.12} 个百分点%
+\footnote{这两项取自一个 \textbf{8000 样本的测试子集}，\textbf{非全量 10\,000}；该子集下 clean 行为 59.60，
+而全量口径为 59.99。因两项同口径，headroom 内部自洽；台账 \S6 已将其记为\textbf{下界}。
+全量口径的重跑已列入第七阶段 M0c。}；
 $\alpha=+0.4$ 时 30.41、$\alpha=+0.5$ 时 30.38。
 失真越强，headroom 越大——这与"信息差被拉大"一致，而与"信息被摧毁"不一致。
 
