@@ -761,6 +761,48 @@ ResNet-18（Exp3 主干）$R^2=\textbf{0.9778}$ / MAE 0.0219。
 机制因此被改写成更保守的形式：\textbf{门控红利 $=$ 鲁棒头干净代价的回收量}；
 当干净代价小于 1 个百分点时，直接用单鲁棒头即可。
 
+\paragraph{为什么它只能"弱支配"：一个机制级的回答。}
+上面那条"没有复现"是\textbf{跨数据集的经验事实}。它后来有了一个\textbf{机制级的解释}，
+而这个解释同时把那个主张\textbf{永久关闭}了。
+
+两个头的错误是否互补，可以直接测：取两个头在同一批样本上的 0/1 错误指示向量，
+算它们的 $\phi$ 相关。\textbf{只有当两头的错误负相关时，插值才可能"集成"出比两头都好的结果。}
+
+实测（7 个 $\alpha$ 点，每个数据集 21 格）：
+
+\begin{center}
+\small
+\begin{tabular}{lcc}
+\toprule
+& CIFAR-100 & CIFAR-10 \\
+\midrule
+$\phi$ 范围 & $+0.594\sim+0.706$ & $+0.519\sim+0.830$ \\
+两头都错 / 独立基线 & $1.50\sim1.98$ & $2.76\sim6.58$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{$\phi$ 在两个数据集上都是强正}——两个头的错误\textbf{正相关}，
+它们在同一批样本上\textbf{一起错}。
+⇒ \textbf{「插值即集成」所依赖的互补性，在两个数据集上都不存在。}
+
+由此两条：
+
+\begin{enumerate}[leftmargin=2em,itemsep=2pt]
+  \item \textbf{那个机制是被否证，不是"未能分辨"。}本文因此把「插值即集成」
+        \textbf{永久关闭}——不是"没复现"，是它依赖的前提不成立。
+  \item \textbf{收益的上界由此变得可解释}：没有互补性可利用，插值的增益注定有限。
+        实测"软门控减 oracle"的极差，CIFAR-100 为 \textbf{1.60} pp、CIFAR-10 只有 \textbf{0.71} pp，
+        与"两头错误高度正相关"一致。
+\end{enumerate}
+
+\textbf{这里要分清}：被关闭的是\textbf{机制解释}，不是\textbf{那个效应本身}。
+CIFAR-100 上软门控确有若干点超过两个头，那个效应仍然存在、也仍未被完全解释——
+本节给出的机制只说明了\textbf{它的上界为什么不高}，没有说明\textbf{它为什么不为零}。
+
+（出处：\texttt{outputs\_cifar100/v7\_gate\_mechanism/gate\_errors.csv}。
+该诊断含一条恒等自检：$\text{soft}-\text{oracle}=(\text{rescue}-\text{hurt})\times100$，通过。）
+
 \textbf{再补一步：那个 $+0.17$ 的裕度是不是碰巧？}
 上面的 CIFAR-10 检验只用了\textbf{一个主干种子}——3 个种子变的是鲁棒头与估计器，不是主干本身。
 为判断裕度是否稳健，把 CIFAR-10 的 mp 主干补到 3 个种子，每个主干各跑一次完整配方：
