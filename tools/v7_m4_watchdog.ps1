@@ -102,19 +102,27 @@ while ($true) {
             '--tag',     "_s$($r.seed)"
         )
         $env:PYTHONIOENCODING = 'utf-8'
+        # !! 必须重定向输出 !! （2026-09-24 实修）
+        # 首版漏了这一步，后果：16:37 那次真实接手里，重启的训练输出全部丢失，
+        # `logs_v7_m4_train_part2.log` 停在崩溃前的内容 —— 监控者会以为训练没在跑。
+        # 训练本身没受影响（GPU 96%、best_model.pth 在更新），但可见性没了。
+        $runLog = Join-Path $repo ('logs_v7_m4_restart_s' + $r.seed + '.log')
+        $runErr = Join-Path $repo ('logs_v7_m4_restart_s' + $r.seed + '.err')
         # 用 Start-Process 而不是 & 调用：让训练不在 watchdog 的进程树里，
         # 这样 watchdog 万一被杀，训练也活着（这正是本脚本存在的理由）
         try {
             $spArgs = @{
-                FilePath         = $py
-                ArgumentList     = $argList
-                WorkingDirectory = $repo
-                WindowStyle      = 'Hidden'
-                Wait             = $true
-                ErrorAction      = 'Stop'
+                FilePath               = $py
+                ArgumentList           = $argList
+                WorkingDirectory       = $repo
+                WindowStyle            = 'Hidden'
+                Wait                   = $true
+                ErrorAction            = 'Stop'
+                RedirectStandardOutput = $runLog
+                RedirectStandardError  = $runErr
             }
             Start-Process @spArgs
-            Write-Log ('  seed ' + $r.seed + ' finished')
+            Write-Log ('  seed ' + $r.seed + ' finished (stdout -> ' + $runLog + ')')
         } catch {
             Write-Log ('  !! launch failed for seed ' + $r.seed + ': ' + $_.Exception.Message)
         }
