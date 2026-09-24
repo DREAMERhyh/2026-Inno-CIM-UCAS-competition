@@ -318,7 +318,7 @@ $\exp(-\sum_i p_i \ln p_i)$，其中 $p_i$ 为归一化奇异值；
 \section{结果}
 \label{sec:results}
 
-\subsection{正向失真更致命，且这个方向性跨架构稳定——但倍数不是常数}
+\subsection{正向失真更致命，但方向随深度衰减——在最深的主干上反号}
 
 \cref{fig:direction} 给出三个主干在 CIFAR-100 上的七点扫描。
 $\alpha>0$（正侧）的破坏力大于 $\alpha<0$（负侧），
@@ -348,7 +348,7 @@ VGG-11 从 67.09 掉到 16.92，ResNet-18 从 72.09 掉到 2.70。
 需要强调的是，$\alpha>0$ 与 $\alpha<0$ 的破坏力之比\textbf{不是常数}：
 在 CIFAR-10/SimpleCNN/$|\alpha|=0.3$ 这一个点上是 3.4，
 而 CIFAR-100 的同一模型上只有 1.87。跨条件引用这个倍数会出错；
-跨阶段稳定成立的只有\textbf{方向}。
+连\textbf{方向}本身也不是跨架构常数——CIFAR-10 的三个主干依次为 $3.4$ / $1.40$ / \textbf{$0.94$}，在最深的主干上反号。
 
 \subsection{灾难尾丢的不是信息，而是读出的可解码性}
 \label{sec:probe}
