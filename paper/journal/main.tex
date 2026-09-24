@@ -429,6 +429,33 @@ ResNet-18 从 72.69 掉到 \textbf{15.53}。这是"再分配"的极端形态，�
 \textbf{注意}：该臂是 24\,ep / 3 seed 口径，与上文引用的单点适配读数 52.79 来自不同轮次，
 两者\textbf{不可直接相比}。）
 
+\paragraph{同一套做法在更简单的任务上更强——一条标度律。}
+把读出适配原样搬到 CIFAR-10（10 类，比 CIFAR-100 容易）：
+
+\begin{center}
+\small
+\begin{tabular}{lcccccc}
+\toprule
+主干 & 原头 @$+0.3$ & 读出适配 @$+0.3$ & clean 代价 & \textbf{恢复率（C10）} & 恢复率（C100） \\
+\midrule
+SimpleCNN & 55.08 & \textbf{72.51} & $-0.84$ & \textbf{85.4\%} & 72.2\% \\
+VGG-11 & 36.71 & \textbf{79.64} & $-0.58$ & \textbf{88.7\%} & 70.2\% \\
+ResNet-18 & 17.09 & \textbf{44.37} & $-0.71$ & \textbf{48.2\%} & 36.9\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+（24 epoch 读出，全量测试集；恢复率 $=$ 读出适配 @$+0.3$ 的精度 $\div$ 原头 @$\alpha=0$ 的精度。
+CIFAR-100 的对应值取自 \cref{fig:rankrec} 所在小节。出处：\texttt{outputs/v3\_readout\_repair/*ep24*.csv}
+与 \texttt{outputs\_cifar100/v3\_readout\_repair/*ep24*.csv}。）
+
+两件事同时成立：\textbf{恢复率在三个主干上一致更高}（85.4 / 88.7 / 48.2 对 72.2 / 70.2 / 36.9），
+\textbf{干净代价也小得多}（$-0.58\sim-0.84$ 对 $-3.19\sim-6.67$）。
+⇒ 读出适配的收益\textbf{随"可用头部空间"缩放}：任务越难，能被读出捞回来的越少。
+这与本文第 \ref{sec:probe} 节的逻辑一致——可恢复量由"信息还剩多少"决定，
+而更难的任务在同样的失真下损耗更多。
+（注：CIFAR-10 侧的读出为\textbf{单 seed}；CIFAR-100 侧为 3 seed。这一点记在局限里。）
+
 \subsection{训练端的四条补救路径全部失效，因为损伤落在参数空间之外}
 
 如果尾部是"训练不够适应"，那么更聪明的采样或更宽的分布应该能救它。
