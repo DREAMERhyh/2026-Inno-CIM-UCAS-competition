@@ -78,6 +78,20 @@
 
 ## 二、⚠️ 只见于检索摘要、尚未核实（**不许引用，先核实**）
 
+> **核实进展（2026-09-24，M0b 执行）**：7 条里 **4 条已销**，剩 3 条。
+>
+> | 原编号 | 文献 | 新状态 |
+> |---|---|---|
+> | 1 | Science Advances MTJ (sciadv.adp3710) | ✅ **已核实**——标题/作者/期刊/DOI：*Adapting magnetoresistive memory devices for accurate and on-chip-training-free in-memory computing*，T. Xiao, V. B. Naik, J. H. Lim, Y. Hou, Z. Wang, Q. Shao，**Sci. Adv. 10(38):eadp3710, 2024-09-20**。内容：MTJ + **离线标定**达软件基线、无需片上训练；自适应量化用**电导漂移感测** |
+> | 2 | IBM HWA (Nature Comm s41467-023-40770-4) | ✅ **标题已核实**：*Hardware-aware training for large-scale and diverse deep learning inference workloads using in-memory computing-based accelerators* |
+> | 6 | Graph-JEPA (arXiv 2608.20516) | ✅ **逐字核实**：Gollam Rabby, Sören Auer；「linear-probe accuracy 0.871 and effective rank 18-47, yet retrieval recovers **0.00 of 14.4 bits**」；「**Rank, probes, and metrics can all saturate on an unsupportive evaluation**」 |
+> | 7 | arXiv 2310.03843 | ✅ **已核实，但标题与我原笔记不符**——实为 *From Channel Bias to Feature Redundancy: Uncovering the "Less is More" Principle in Few-Shot Learning*（Zhang, Luo, Gao, Zou, Shen, Song）。原笔记写的 *Less is More: On the Feature Redundancy…* 应是 v2 改名（该页有 "substantial text overlap with arXiv:2206.08126" 的 admin note）。内容对得上：**少样本下 1–5% 的特征维度就够，且大部分维度是有害的** |
+> | 3 | Nature Comm PCM 漂移补偿 | ⚠ **仍未见原文** |
+> | 4 | IGZO DRAM CIM (IEEE 2025) | ⚠ **仍未见原文** |
+> | 5 | ICML 2026 *Neural Collapse by Design* | ⚠ **页面是 JS 渲染，curl 抓不到正文**；需 `playwright-cli --browser=msedge` |
+>
+> **结论**：`docs/POSITIONING.md` 只使用 ✅ 的条目。⚠ 的对本项目论断**不作依据**。
+
 | 文献 | 检索摘要说它是什么 | 对本项目的潜在意义 | 待办 |
 |---|---|---|---|
 | *Adapting magnetoresistive memory devices for accurate and on-chip-training-free in-memory computing*（Science Advances，DOI 10.1126/sciadv.adp3710） | MTJ 存内计算，**无需片上训练**即达软件基线：用器件特定电导漂移查找表 + 自适应量化，**少量校准样本重新参数化预训练模型**；MAC RMSE 2.48 → 0.57 LSB | **最接近的先行工作**。若属实，说明"冻结阵列 + 数字域少量校准"**在 CIM 领域已有人做**，我们的定位必须更精确 | 抓原文（当前被墙） |
