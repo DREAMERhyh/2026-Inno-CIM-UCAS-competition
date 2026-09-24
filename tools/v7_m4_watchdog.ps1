@@ -37,6 +37,14 @@
 #       that was a CRASH -> break out of the chain (do NOT start the next run)
 #   (3) Exponential backoff on consecutive crashes
 #   (4) Memory gate: never launch while free physical memory is too low
+#
+#  KNOWN QUIRK (not yet fixed, 2026-09-24): when the memory gate defers, the
+#  loop `continue`s back to the top, where $absentCount is recomputed from 0
+#  -- so a deferred launch costs ANOTHER 5 minutes of counting before the next
+#  attempt. Observed: 19:24:31 deferred -> 19:29:32 restarted counting at 1/5
+#  -> 19:33:35 took over. Not a correctness bug (it still fires), but if you
+#  want it to retry every 5 min instead of every 10, move the
+#  `$absentCount = 0` line to AFTER the memory gate.
 # =====================================================================
 
 $ErrorActionPreference = 'Continue'

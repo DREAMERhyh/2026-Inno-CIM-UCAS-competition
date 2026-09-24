@@ -154,7 +154,25 @@ powershell -NoProfile -Command "Start-Process -FilePath 'powershell.exe' -Argume
 
 ---
 
-## 5. 🔴 待用户裁决：`nat` 参考文献
+## 5. ✅ `nat` 参考文献 —— **已裁决并已修**（2026-09-24 19:25，commit `4337fd9`）
+
+**处置：换成真实的 NEAT + 改写 §1.3 那句话**（用户授权总管自行决定）。
+
+**为什么不是"只换 NEAT"** —— 这是本轮最该记住的一课：
+`nat` 是「**引用不存在**」，而 NEAT 是「**引用存在、但描述不符**」。
+论文原句说 NAT「把失真注入训练过程」，而 NEAT 原文（arXiv abs + ar5iv §III，逐字）是
+「**regularize the weights … to exist within the linear operating range**」
+—— **它约束权重让器件留在线性区，是在"规避"非线性，与"注入失真"恰好相反。**
+⇒ **只换 NEAT 会变成"真引文配错描述"，比假引文更难被发现。**
+⇒ **总管先前推荐"换成 NEAT"用的是 L1（著录）判断，没做 L2（内容）—— 这也是总管自己犯的一次规。**
+
+**改后更锋利**：改写成「**别人规避、本文测量**」（NEAT 约束权重避开非线性；本文的失真无法由权重约束规避）。
+
+**该节以下内容为原始记录（保留作过程档）** ⬇️
+
+---
+
+### 5·旧、原始记录：`nat` 的核查过程（2026-09-24 16:00–19:20）
 
 **四份文档**（`paper/journal`、`paper/technical-report`、`paper/competition`、`ucas-cod-lab-report`）
 里的 `\bibitem{nat}`（Zhu M 等, IEEE TCAD 2022, **41(11): 3961–3973**）：
