@@ -78,6 +78,12 @@
 
 ## 二、⚠️ 只见于检索摘要、尚未核实（**不许引用，先核实**）
 
+> 🔴 **本表与下方表格的关系（2026-09-24 写死，防两张表不同步）**：
+> **核实状态一律以顶部这个「核实进展」块为准。** 表格的"待办"列只是当时的原始记录，
+> **可能滞后或已被上方块推翻**。
+> 本日已发生一次不同步：块里标 ✅ 的条目，表格里还写着"抓原文"（claude-65 报出、总管收口）。
+> **改动本文件时，两处必须一起改。**
+
 > **核实进展（2026-09-24，M0b 执行）**：7 条里 **4 条已销**，剩 3 条。
 >
 > | 原编号 | 文献 | 新状态 |
@@ -99,7 +105,7 @@
 | PMC 漂移补偿（Nature Communications, s41467-023-40770-4 相关） | 电导漂移"**can be compensated in the digital domain without any expensive re-programming**"：测 s_ref/s_eval，调数字缩放因子 | 数字域补偿的**标量版**；我们的读出层适配是**更强的形式** | 抓原文 |
 | IGZO DRAM CIM（IEEE 2025） | 免刷新的 ADC 时变校准 | 同类思路的 ADC 侧版本 | 抓原文 |
 | *Neural Collapse by Design: Learning Class Prototypes on the Hypersphere*（ICML 2026） | 用原型对比损失强制神经坍缩几何，**ImageNet-C 上鲁棒性提升**；且"**监督对比学习在预训练中达到 NC，但在事后线性探针中丢掉了它**" | 给我们一个**全新解释框架**（见 §三） | 抓原文 |
-| *Graph-JEPA: Diagnosing and Repairing Category-Conditional Collapse*（arXiv 2608.20516） | 一个模型**线性探针 0.871、有效秩 18–47 全部通过**，但检索上**只恢复了 14.4 bit 里的 0.00 bit**；作者警告"**秩指标与探针可能虚假饱和**" | **对 Central Claim 的直接警示**（见 §三） | 抓原文 |
+| *Graph-JEPA: Diagnosing and Repairing Category-Conditional Collapse*（arXiv 2608.20516） | 一个模型**线性探针 0.871、有效秩 18–47 全部通过**，但检索上**只恢复了 14.4 bit 里的 0.00 bit**；作者警告"**秩指标与探针可能虚假饱和**" | **对 Central Claim 的直接警示**（见 §三） | **✅ 已核实（见上方"核实进展"，逐字核实）** |
 | *From Channel Bias to Feature Redundancy: Uncovering the "Less is More" Principle in Few-Shot Learning*（arXiv 2310.03843） | 少样本下**仅 1–5% 的特征维度**即可恢复全表示性能，且**大部分维度是有害的**；冗余随样本数增加而消失 | 读出训练样本量的冗余曲线（新增任务） | **✅ 已核实（见上方"核实进展"）**——**标题已更正**：原记为 *Less is More: On the Feature Redundancy of Pretrained Models*，**该标题不是 arXiv 2310.03843 的标题**。更正来源：2026-09-24 由 claude-65 经 **arXiv abs 页 + OpenAlex** 两处独立核对；同一更正亦已由 M0b 执行者登记在上方块内（其给出的解释更强：该页有 "substantial text overlap with arXiv:2206.08126" 的 admin note）。 |
 
 **获取方式**（WebFetch 在本机被安全策略拦截）：用 `curl`（已验证对 arXiv 与 PMLR 有效），
