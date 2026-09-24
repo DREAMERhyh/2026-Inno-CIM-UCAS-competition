@@ -15,8 +15,8 @@
 
 > 与本工作最接近的是**测试时适配（TTA）与无源域适应（source-free DA）**这一支。
 > 该社群已确立「**冻结主干、只更新极少数参数**」是分布偏移下的有效范式：
-> **Tent 冻结全部主干，只更新批归一化的仿射参数**〔B1〕；
-> **SHOT 冻结特征提取器、只学习分类头，且不需要访问源数据**〔B2〕。
+> **Tent 在测试时只最小化预测熵、在线重估归一化统计量并只更新其仿射参数**〔B1〕；
+> **SHOT 处理不访问源数据的域适应，它冻结源模型的分类器（hypothesis）、只学习目标域的特征提取器**〔B2〕。
 > **Kumar 等**进一步证明：当预训练特征良好而分布偏移较大时，
 > **线性探针可以优于全量微调**，并给出机制——微调在学头的同时会扭曲底层特征〔B3〕。
 >
@@ -40,8 +40,16 @@
 
 | 代号 | 条目 | 核实 |
 |---|---|---|
-| **B1** | Wang D, Shelhamer E, Liu S, et al. **Tent: Fully Test-time Adaptation by Entropy Minimization**. arXiv **2006.10726**. DOI: https://doi.org/10.48550/arxiv.2006.10726 | ✅ OpenAlex 逐字核（标题/作者/年份/出处）。**出处：`docs/verify/lit_search_tta.md` 方向 1 [1]** |
-| **B2** | Liang J, Hu D, Feng J. **Do We Really Need to Access the Source Data? Source Hypothesis Transfer for Unsupervised Domain Adaptation**. arXiv **2002.08546**. DOI: https://doi.org/10.48550/arxiv.2002.08546 | ✅ OpenAlex 逐字核。同上 [8] |
+| **B1** | Wang D, Shelhamer E, Liu S, et al. **Tent: Fully Test-time Adaptation by Entropy Minimization**. arXiv **2006.10726**. DOI: https://doi.org/10.48550/arxiv.2006.10726 | **L1 著录** ✅（OpenAlex：标题/作者/年份/出处）+ **L2 内容** ✅（arXiv abs 页原文，见 `lit_content_check.md`） |
+| **B2** | Liang J, Hu D, Feng J. **Do We Really Need to Access the Source Data? Source Hypothesis Transfer for Unsupervised Domain Adaptation**. arXiv **2002.08546**. DOI: https://doi.org/10.48550/arxiv.2002.08546 | **L1 著录** ✅（同上）+ **L2 内容** ✅（arXiv abs 页原文，见 `lit_content_check.md`） |
+
+> ⚠ **【2026-09-24 更正】** 本稿初版的 B2 描述写的是「**SHOT 冻结特征提取器、只学习分类头**」——
+> **与原文完全相反**。SHOT 的摘要逐字是
+> "**SHOT freezes the classifier module (hypothesis) of the source model and learns the
+> target-specific feature extraction module**"。
+> **根因**：初版的"逐字核"只用了 OpenAlex/Crossref，**它们只核著录项、核不到方法描述**。
+> ⇒ 已更正，并新增 **L1/L2 两级核实**（见 `docs/verify/lit_content_check.md`）。
+> **B1 的 Tent 描述也一并改严谨**（原文含"estimates normalization statistics"，初版漏了）。
 | **B3** | Kumar A, Raghunathan A, Jones R, Ma T, Liang P. **Fine-Tuning can Distort Pretrained Features and Underperform Out-of-Distribution**. ICLR 2022. arXiv **2202.10054** | ✅ OpenAlex 逐字核（被引 160）。同上 [3-1]；本稿另注明：**Kumar 是本项目已有的基线引文**（`LITERATURE_NOTES.md` §1.1 已逐字核实） |
 
 > **为什么只引 3 条**：复核者说"引 Tent + SHOT 两条就能答"。
