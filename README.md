@@ -1,17 +1,36 @@
 # 存算一体芯片中非线性误差对推理精度的影响研究
 
-> **项目状态：六阶段全部收官（归档 tag `v1.0-archive`）。**
-> 全局台账 `results_master.csv` **152 行数据，配对自检 0 FAIL**；结论收敛为九条（L1–L9），
-> 其中最贵的一课是「精度数字不可跨训练实现移植」。**归档后本仓库不再新增实验。**
+> **项目状态：六阶段收官（归档 tag `v1.0-archive`）＋ 第七阶段自主迭代进行中。**
+> 全局台账 `results_master.csv` **152 行数据，配对自检 0 FAIL**；六阶段结论收敛为九条（L1–L9），
+> 其中最贵的一课是「精度数字不可跨训练实现移植」。
+> 第七阶段（§16）已在归档后新增十余项实验，产出**两条加强中心结论的结果**
+> （容量不是瓶颈；headroom 是下界且可抬高到 +27.63）与**一批方法学结论**
+> （三级可分辨性、两条口径陷阱）。**实验仍在进行，台账 §16 持续追加。**
 
-**四件套（按此顺序读）**
+**先读这四件（按此顺序）**
 
 | 文件 | 是什么 |
 |---|---|
-| [`论文v3.md`](论文v3.md) | 论文：九条结论的终版表述 + 方法 + 局限 + 10 条勘误 + 复现材料 |
-| [`experiments_ledger.md`](experiments_ledger.md) | 实验台账：§0–§15，每个实验的**预登记判据**与结果 |
+| [`论文v3.md`](论文v3.md) | 论文：九条结论的终版表述 + 方法 + 局限 + **12 条勘误** + 复现材料 |
+| [`experiments_ledger.md`](experiments_ledger.md) | 实验台账：§0–§16，每个实验的**预登记判据**与结果 |
 | [`docs/PROJECT_RETROSPECTIVE.md`](docs/PROJECT_RETROSPECTIVE.md) | **阶段史**：每个阶段"当初信什么、后来被什么推翻"；含三次"噪声→翻案"专题与新人上手 |
 | [`deploy_notes.md`](deploy_notes.md) | 部署推演：把结论映射到 CIM 数字后端，三档判定（可行 / 需改动 / 不可行） |
+
+**第七阶段新增的文档**（多会话协作，见 `docs/V7_COORDINATION.md`）
+
+| 文件 | 是什么 |
+|---|---|
+| [`paper/`](paper/) | 三份论文（竞赛 / 期刊 / 技术报告）+ 骨架与形式工作文件；`paper/README.md` 有索引 |
+| [`docs/V7_COORDINATION.md`](docs/V7_COORDINATION.md) | **多会话协调规则**：文件领地、并行上限、通信协议、已踩的坑（**动手前先读**） |
+| [`docs/V7_M4_RUNBOOK.md`](docs/V7_M4_RUNBOOK.md) | M4（深层主干方差）的收尾流程与预登记判据 |
+| [`docs/POSITIONING.md`](docs/POSITIONING.md) | 与先行工作的关系与差异化（LP-FT / CIM 数字域补偿 / 探针批判） |
+| [`docs/LITERATURE_NOTES.md`](docs/LITERATURE_NOTES.md) | 文献核实笔记（每条标注核实状态；⚠ 者不得引用） |
+| [`docs/IMPL_AUDIT.md`](docs/IMPL_AUDIT.md) | 数字–实现对照表（跨实现混用的核查方法） |
+| [`docs/DERIVED_VALUES.md`](docs/DERIVED_VALUES.md) | 派生值登记表（均值/差值/比值必须写清算式） |
+| [`paper/coverage-audit.md`](paper/coverage-audit.md) | 成果覆盖审计与闭环记录 |
+
+**工具**：`build_ledger.py`（重建台账）、`tools/recalc_mean7.py`（复算派生量）、
+`tools/check_papers.py`（**改论文后、提交前必跑**：扫 markdown 残留 + 编译 + 未定义引用）。
 
 一个面向 CIFAR-10 图像分类的深度学习研究框架，用于系统性地分析存算一体(Compute-in-Memory, CiM)芯片中模拟域非线性失真、ADC 量化误差以及两者联合作用下的推理精度退化机制，并提出非线性感知训练(NAT)与架构级鲁棒性增强方案。内置 6 种模型架构(SimpleCNN / RobustCNN / ResNet-18 / VGG-11 / RobustVGG11 / RobustResNet18)，覆盖 3 项核心任务 + 6 项拓展研究，支持断点续训、丰富可视化与自动化消融汇总。
 
