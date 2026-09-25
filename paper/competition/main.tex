@@ -16,6 +16,11 @@
 \usepackage[hidelinks]{hyperref}
 \usepackage{cleveref}
 \usepackage{indentfirst}
+% 圈码 ①-⑥ 与 ⇒ 的缺字形修复（2026-09-25 外部体检查出：成品 PDF 里 46 处静默消失）
+% 单靠 \xeCJKDeclareCharClass 不够——中文字体有 ①-⑥ 但没有 ⇒，故另配 newunicodechar
+\usepackage{newunicodechar}
+\xeCJKDeclareCharClass{CJK}{"2460 -> "24FF}
+\newunicodechar{⇒}{\ensuremath{\Rightarrow}}
 
 \graphicspath{{../figures/}}
 \captionsetup{font=small,labelfont=bf}
@@ -69,6 +74,10 @@ Dithering 的机理是\textbf{离散化分布重塑}（分类器输入峰度从 
 \vspace{0.6em}
 \noindent\textbf{关键词：} 存算一体；非线性失真；非线性感知训练；残差校准；Dithering；量化误差
 \end{abstract}
+
+\vspace{0.4em}
+\noindent\textbf{范围声明}：本稿覆盖\textbf{第一、二阶段}的工作（CIFAR-10 上的任务 1--3、三项拓展与评审意见三项优化）；
+第三阶段起的跨数据集与跨架构工作（CIFAR-100、VGG-11 / ResNet-18 主干）见同期报告，\textbf{不在本稿范围内}。
 
 \section{引言}
 
@@ -395,6 +404,8 @@ ResNet-18 & 92.09 & 57.15 & \textbf{17.08} \\
 
 \textbf{结论是负面的但重要}：非线性失真与高斯噪声的鲁棒性\textbf{不可跨域迁移}。
 针对高斯噪声设计的方法不能期待在非线性失真下有效。
+（后续阶段补充：这条"不可迁移"\textbf{是架构依赖的}——在 MaxPool 密集的 VGG-11 上迁移非零，
+$\max|\Delta_\sigma|=5.26$；本稿的"不可迁移"结论限于本稿覆盖的架构。）
 
 \subsection{拓展3：量化误差与非线性误差的联合作用}
 
@@ -671,13 +682,15 @@ SimpleCNN 上的 Exp2 采用单一注入点（全局池化之后），
 本文在 CIFAR-10 上系统考察了模拟域非线性失真对神经网络的影响与应对，主要结论：
 
 \begin{enumerate}[leftmargin=2em,itemsep=2pt]
-  \item 正向失真的破坏力是负向的 3.4 倍，误差从浅层向深层超加性累积；
-        残差连接是误差放大器，ResNet-18 在 $\alpha=+0.3$ 下损失 75 个百分点。
+  \item 正向失真的破坏力在浅层主干上强于负向（SimpleCNN 上为 3.4 倍），
+        \textbf{但方向性随深度衰减、在最深的主干上消失}（ResNet-18 上为 0.94）；
+        误差从浅层向深层超加性累积，残差连接是误差放大器，ResNet-18 在 $\alpha=+0.3$ 下损失 75 个百分点。
   \item 非线性感知训练在纯前馈网络上有效（$+8\sim9$ 个百分点），
         在残差网络极限失真下失效（$-1.44$）；效果与注入点数量负相关。
   \item 叠加残差校准模块与分层加权采样后，SimpleCNN 的 $\alpha=+0.3$ 达 \textbf{68.76\%}，
         且干净精度不降反升；分层加权是贡献最大的单项（$+5.13$）。
-  \item 非线性失真与高斯噪声的鲁棒性\textbf{不可跨域迁移}，
+  \item 非线性失真与高斯噪声的鲁棒性\textbf{不可跨域迁移}（\textbf{架构依赖}：
+        在 MaxPool 密集的 VGG-11 上迁移非零，$\max|\Delta_\sigma|=5.26$），
         两者在 ResNet-18 上的排序完全反转。
   \item 量化与非线性的联合作用呈三分格局：超加性 / 次加性（Dithering）/ 地板效应。
   \item \textbf{非线性感知训练的鲁棒性是训练分布内的属性}：
@@ -690,7 +703,7 @@ SimpleCNN 上的 Exp2 采用单一注入点（全局池化之后），
 
 \subsection{局限与后续方向}
 
-\textbf{局限}：三项拓展的数据集多样性（评审建议 R4）在时间约束下未执行；
+\textbf{局限}：三项拓展的数据集多样性（评审建议 R4）\textbf{不在本稿范围内}（见文首范围声明）；
 校准模块的机理证据是相关性证据（峰度-精度关联与架构对照），
 未做因果干预实验（如逐层替换 MaxPool 为平均池化）；
 残差网络正侧强失真区的绝对精度仍然很低（20.12\%），

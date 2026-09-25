@@ -18,6 +18,11 @@
 \usepackage[hidelinks]{hyperref}
 \usepackage{cleveref}
 \usepackage{indentfirst}
+% 圈码 ①-⑥ 与 ⇒ 的缺字形修复（2026-09-25 外部体检查出：成品 PDF 里 46 处静默消失）
+% 单靠 \xeCJKDeclareCharClass 不够——中文字体有 ①-⑥ 但没有 ⇒，故另配 newunicodechar
+\usepackage{newunicodechar}
+\xeCJKDeclareCharClass{CJK}{"2460 -> "24FF}
+\newunicodechar{⇒}{\ensuremath{\Rightarrow}}
 
 \graphicspath{{../figures/}}
 \captionsetup{font=small,labelfont=bf}
@@ -110,7 +115,8 @@
 并给出该场景特有的\textbf{上界}（探针 headroom 与可恢复量）、
 \textbf{机制}（有效秩塌陷、同强度下正侧 Fisher 反高于负侧）、\textbf{边界}（门控两前提 + 读出层须在数字域），
 外加一个先行工作里没有对应物的\textbf{正交架构杠杆}（池化降维）。
-在 CIM 领域，「冻结阵列 + 数字域补偿」已有先例，但形态是\textbf{标量或查找表级}校正；
+在 CIM 领域，「冻结阵列 + 数字域补偿」已有先例（例如用器件特定的电导漂移查找表配合自适应量化，
+在\textbf{不做片上训练}的前提下达到软件基线精度~\cite{mtjcal}），但形态是\textbf{标量或查找表级}校正；
 本项目动的是整个读出层，代价更大（要求读出层可重写）。
 本报告同时\textbf{主动记录}了本项目最依赖的测量手段（线性探针）正被文献警示可能虚假饱和~\cite{gjepa}，
 以及对应的加固方案。
@@ -470,6 +476,11 @@ SimpleCNN 的该主干即 \texttt{task1} 权重，故与台账逐位一致）。
 VGG-11 与 ResNet-18 取 200\,ep 的 Exp3，24.69 / 6.22）。
 注意 \textbf{ResNet-18 的第三行与该列第一行是同一块主干}——全网络配方并没有改善它的原始头。
 （\texttt{task1} 主干的 16.92 / 2.70 属另一批权重，不参与本表逐列比较。）
+\textbf{第二行的 $\pm$ 是"读出种子"口径}（固定该主干、只换 3 个读出种子）；
+换成"主干种子"口径（读出侧固定 seed 42、3 个主干种子）后，深层尾部均值为
+VGG-11 $46.82\pm0.25$、ResNet-18 $22.91\pm2.61$——
+后者低于本表的 $26.82$。两组口径\textbf{只有一格重合}，
+是同一张 $3\times3$ 表的两条不同边缘，\textbf{不可相减或互替}。
 \end{minipage}
 \end{table}
 
@@ -600,7 +611,7 @@ max 的选择性 & 换成 top-2 池化（与 $f_\alpha$ 不可交换）
 \texttt{mp 主干 $+$ 读出适配} 的 $\alpha=+0.3$ 达 \textbf{49.12}
 （相对基线 28.09 即 $+21.03$），而两个手段单独的增益之和是 $+29.67$
 （架构 $+14.38$ 与读出 $+15.29$ 分别取自同批\textbf{单 seed} 产物的 42.47 与 43.38）
-——\textbf{合起来只拿到六到七成，损失三到四成}。
+——\textbf{合起来只拿到约七成，损失约三成}。
 本段四个数（28.09 / 42.47 / 43.38 / 49.12）\textbf{全部为单 seed 口径}
 （连续均匀 $\alpha$、24\,ep、20k 样本，同 v3 路径）；
 13 点离散 $\alpha$、3 seed 的 v5 口径给出同样的次可加结论。
@@ -702,11 +713,11 @@ ResNet-18 的 4bit 减 8bit 增益为 $-0.21$、SimpleCNN 为 $-14.71$。
 \textbf{问题}：这 3 个种子来自\textbf{两个脚本}。
 
 \textbf{否证}：补跑同脚本的第三个种子后，同协议的尾部标准差只有 $\pm0.392$，
-而混协议组是 $\pm2.561$——\textbf{方差被估高约 6 倍}。
+而混协议组是 $\pm2.561$——\textbf{标准差被估高约 6 倍}。
 进一步的定量分解显示：混合组里两个数相差 5.32，与实测的脚本级处理效应 5.52 几乎相等，
 也就是说 \textbf{那 2.56 里绝大部分不是随机噪声，而是两种训练配方之间的系统差}。
 
-\textbf{制度补丁}：\textbf{方差对比必须同脚本、同一采样代码路径}。
+\textbf{制度补丁}：\textbf{散布对比必须同脚本、同一采样代码路径}。
 
 \subsection{第二次：把脚本差异误读成采样粒度}
 
@@ -759,7 +770,7 @@ shared 26.55 vs per-layer 26.57，差 $+0.02$（$z=0.08$）；
 轮次 & 归因 & 结果 \\
 \midrule
 1 & 尾部\textbf{种子噪声} $\pm3.1$
-& 否证：三种子来自两脚本；同协议标准差只有 $\pm0.39$，混协议把方差估高约 6 倍 \\[2pt]
+& 否证：三种子来自两脚本；同协议标准差只有 $\pm0.39$，混协议把标准差估高约 6 倍 \\[2pt]
 2 & $\alpha$ 采样\textbf{粒度}
 & 否证：同脚本切换粒度差 $+0.02$（$z=0.08$），同粒度跨脚本差 $+5.52$（$z=9.4$） \\[2pt]
 3 & 随机数\textbf{消耗位置}
@@ -797,7 +808,7 @@ shared 26.55 vs per-layer 26.57，差 $+0.02$（$z=0.08$）；
         含均值、差值、占比这些\textbf{派生量}——它们不带原值，模糊搜索抓不到。
         这条制度立起来的原因是：一次降级只改了被降级的那一节本身，
         而它派生出去的数字还在下游活着（其中一处甚至是"同一行内混了两个脚本"）。
-  \item \textbf{方差对比三要求}：同脚本 / 已交叉评估 / 未校准的组必须标注。
+  \item \textbf{散布对比三要求}：同脚本 / 已交叉评估 / 未校准的组必须标注。
         后续补充第四条：跨实现比较前先做消耗数等价检查；
         且"同脚本 $+$ 交叉评估"\textbf{不足以}让两套跨脚本数字可比。
   \item \textbf{判据跑前写死，跑后不改}。六个阶段的每个实验都在台账里留了预登记，
@@ -909,7 +920,7 @@ ETF / 原型读出 & \textbf{无增益}。三种原型或 ETF 正则读出均未
 \toprule
 层级 & 变的是什么 & 实测幅度 \\
 \midrule
-① 种子噪声 & 同一过程重复 & 尾部 $\pm0.39\sim3.40$；clean $\pm0.07\sim1.85$ \\
+① 种子噪声 & 同一过程重复 & 尾部 $\pm0.25\sim3.40$；clean $\pm0.07\sim1.85$ \\
 \textbf{② 过程自由度} & \textbf{同数据、同特征、同架构，只换拟合过程} & \textbf{3.45 pp} \\
 ③ 跨实现 & 同超参同种子，实现不同 & 5.55 pp（未归因） \\
 \bottomrule
@@ -937,7 +948,7 @@ $\alpha=+0.3$ 上要打一点折扣：极值跨了两个因子（最高仍是 Ad
 
 \begin{center}
 \small
-\begin{tabular}{lll}
+\begin{tabular}{llp{6.2cm}}
 \toprule
 陷阱 & 不做会怎样 & 为什么会 \\
 \midrule
@@ -1138,10 +1149,14 @@ grep "cifar100|simple_cnn|clean|7pt" results_master.csv
 headroom 还有多大、读出杠杆是否成立，\textbf{无法回答}。
 已知下界来自高斯对照（20.26 $\to$ 7.50）。
 
-\textbf{(2) 深层主干是单次训练产物。}
-VGG-11 与 ResNet-18 的主干各只训一次；读出侧的 3 个种子不含主干训练方差。
-而深层上已知的方差已经不小（固定主干换读出种子，干净精度从 63.54 摆到 67.61）。
-因此涉及深层的所有差值——包括门控红利 $-1.14$——\textbf{是否在主干种子方差内无法裁决}。
+\textbf{(2) 深层差值的可裁决性（已补测，原判断部分保留）。}
+原写"深层主干是单次训练产物……涉及深层的所有差值是否在主干种子方差内无法裁决"。
+现每个深层主干已补训到 3 个种子（读出侧固定 seed 42）。
+尾部（$\alpha=+0.3$）的\textbf{主干级}标准差为 VGG-11 $0.25$、ResNet-18 $2.61$，
+\textbf{均小于对应的读出级标准差}（$3.18$ / $3.40$）——即此前印出的 $\pm$ 值没有低估总不确定度。
+读出适配线上的深层差值因此可以裁决（须写明在已测主干上成立）；
+而门控红利 $-1.14$ 仍落在主干级散布 $2.61$ 之内，\textbf{这一条仍然不可裁决}——
+理由从"没有测"变成了"测了，方差确实盖得住它"。
 
 \textbf{(3) 池化保护的定量分解没有定下来。}（avg 与 max 的差值只有 $+1.17$，$z\approx1.1$。）
 
@@ -1162,7 +1177,7 @@ VGG-11 与 ResNet-18 的主干各只训一次；读出侧的 3 个种子不含�
 \textbf{(8) 架构杠杆只在含池化的主干上验证过。}
 「池化密度是独立杠杆」的证据全部来自 SimpleCNN 家族（MaxPool 2 个 $\to$ 5 个）；
 而本项目用的 ResNet-18 已按 CIFAR 适配去掉初始 MaxPool，其 \texttt{maxpool\_count} 为 0
-（\texttt{outputs\_cifar100/extension5\_dithering\_vgg11/arch\_dithering\_summary.csv}）——
+（\path{outputs_cifar100/extension5_dithering_vgg11/arch_dithering_summary.csv}）——
 \textbf{对本身不含池化的架构（含注意力主干），这条建议没有对应的旋钮}，
 本文给不出替代方案；而第 \ref{sec:deploy} 节把它排在落地顺序的第一步。
 
@@ -1174,7 +1189,7 @@ VGG-11 与 ResNet-18 的主干各只训一次；读出侧的 3 个种子不含�
 \textbf{(10) 探针是 oracle-$\alpha$ 读数，缺一条与部署同构的读出臂。}
 探针逐 $\alpha$ 训练（见第 \ref{sec:findings} 节的口径标注），
 因此 headroom 度量的是"已知失真强度时还能恢复多少"。
-一条用 $\alpha$ 混合数据训练的（与部署同构的）读出臂\textbf{正在测量中}；
+一条用 $\alpha$ 混合数据训练的（与部署同构的）读出臂\textbf{尚未产出}（脚本与预登记判据已就绪，受资源限制未执行）；
 在它落定之前，\textbf{headroom 与部署可达之间的缺口有多大，无法回答}。
 
 \textbf{(11) 低位量化与读出适配从未组合测量。}
@@ -1201,7 +1216,7 @@ VGG-11 与 ResNet-18 的主干各只训一次；读出侧的 3 个种子不含�
 3 & 其他采样粒度定义（逐 block 独立等） & 2$\sim$3 次训练 & 前提已失效 \\
 4 & 粒度对负侧的影响 & 0（复用） & 降为"数据已到手，未分析" \\
 5 & $R^2$ 上界能否用"池化压掉多少 $\alpha$ 信息"定量解释 & 0（复用） & 零成本 \\
-6 & 深层主干的重训方差 & 4 次训练 $\times$ 4h & 贵，但能说清深层结论的置信度 \\
+6 & 深层主干的重训散布 & 4 次训练 $\times$ 4h & 贵，但能说清深层结论的置信度 \\
 7 & 门控"两头都不崩"能否量化成装前自检 & 0（复用） & \textbf{已判否定}（两种定义都不分离） \\
 8 & 深层双头为什么绝对值不低 & 0（复用） & 需先做同口径比较 \\
 9 & 秩-恢复曲线的形状（"先平后塌"） & 需第 4 个模型 & 再加 1 个模型即可看形状 \\
@@ -1226,7 +1241,7 @@ VGG-11 与 ResNet-18 的主干各只训一次；读出侧的 3 个种子不含�
   \textbf{只给出一个新名字不算}（这条已被证伪三次）。
   已验证无效的路径：换评估路径。建议做法：逐行对齐两个训练循环做二分
 & $\ge2$ 次训练 \\
-深层主干方差 & 每个深层主干重训 2 个种子；拿到后重算深层全部差值的置信区间
+深层主干散布 & 每个深层主干重训 2 个种子；拿到后重算深层全部差值的置信区间
 & $\approx$16 h \\
 池化保护的两成分分解 & 每组 $\ge8$ 个种子，\textbf{或}换效应量更大的对照（池化窗口 $2\times2$ vs $4\times4$）
 & 9$\sim$10 h \\
@@ -1279,9 +1294,10 @@ VGG-11 与 ResNet-18 的主干各只训一次；读出侧的 3 个种子不含�
 \bibitem{vgg} Simonyan K, Zisserman A. Very deep convolutional networks for large-scale image recognition[C]//ICLR. San Diego: ICLR, 2015: 1--14.
 \bibitem{cifar} Krizhevsky A. Learning multiple layers of features from tiny images[R]. Toronto: University of Toronto, 2009.
 \bibitem{lpft} Kumar A, Raghunathan A, Jones R, et al. Fine-tuning can distort pretrained features and underperform out-of-distribution[C]//ICLR. 2022. arXiv:2202.10054.
-\bibitem{tent} Wang D, Shelhamer E, Liu S, et al. Tent: fully test-time adaptation by entropy minimization[R]. 2020. arXiv:2006.10726.
-\bibitem{shot} Liang J, Hu D, Feng J. Do we really need to access the source data? Source hypothesis transfer for unsupervised domain adaptation[R]. 2020. arXiv:2002.08546.
+\bibitem{tent} Wang D, Shelhamer E, Liu S, et al. Tent: fully test-time adaptation by entropy minimization[C]//International Conference on Learning Representations. 2021. arXiv:2006.10726.
+\bibitem{shot} Liang J, Hu D, Feng J. Do we really need to access the source data? Source hypothesis transfer for unsupervised domain adaptation[C]//International Conference on Machine Learning. 2020: 6028--6039. arXiv:2002.08546.
 \bibitem{gjepa} Rabby G, Auer S. When Graph-JEPA learns the wrong thing: diagnosing and repairing category-conditional collapse[R]. 2026. arXiv:2608.20516.
+\bibitem{mtjcal} Xiao Z, Naik V B, Lim J H, et al. Adapting magnetoresistive memory devices for accurate and on-chip-training-free in-memory computing[J]. Science Advances, 2024, 10(38): eadp3710.
 \end{thebibliography}
 
 \end{document}

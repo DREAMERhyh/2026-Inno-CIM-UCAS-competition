@@ -1,4 +1,4 @@
-# 交接文档（快照：2026-09-25 16:20）
+# 交接文档（快照：2026-09-25 18:45）
 
 > **本文件是某一时刻的快照，不是长期规则。**
 > **长期规则**看 `docs/V7_COORDINATION.md`（领地、红线、坑表、方法学纪律）。
@@ -13,12 +13,11 @@
 |---|---|
 | 仓库 | `d:\deeplearning_practice\存算一体` |
 | 阶段 | **第七阶段**（台账 §16） |
-| **在跑的唯一长任务** | **M4 的 s44**（`resnet18/exp3/seed44/200ep`），**PID 10820**，12:11:01 起，**ETA ≈ 17:54** |
-| **谁在保它** | `tools/v7_m4_watchdog.ps1` **v3**（pid 19356）—— **它会自动跳过已完成的 run，只跑缺的** |
-| **M4 进度** | run1 ✅ 67.86 / run2 ✅ 67.64 / **run3 ✅ 72.79（9-25 01:47 完成）** / **run4 ⏳ 在跑** |
-| **论文** | ✅ **三份稿全部完成且编译通过**（EXIT=0）。**但投稿前必须等 M4 出数** |
-| 台账 | 写到 **§16.8**；**写锁在 claude-65（但那会话已随重启消失）** |
-| 内存 | 物理 16 GB。**重启后训练占 ~6 GB，其余要留够** |
+| **在跑的长任务** | **无** —— M4 已于 **2026-09-25 18:19** 全部跑完。训练守护与读出衔接脚本**都已正常退出**（`logs_v7_m4_readout.log` 尾行 `readout runner exited`） |
+| **M4 结果** | ✅ **判分支 ②（1.5~3 pp）**，**未触发止损线 1**。四个 run：67.86 / 67.64 / 72.79 / **73.09**（全部 `total_epochs` 达标）。主干级 std（尾部）VGG-11 **0.25** / ResNet-18 **2.61**，**均小于读出级**（3.18 / 3.40）⇒ **论文的 ± 没有低估总不确定度**。完整记录见 **台账 §16.1** |
+| **论文** | ✅ 三份稿**已完成并同步 M4**（journal **29 页** / technical-report **24 页** / competition **13 页**），**检查器 EXIT=0** |
+| 台账 | 写到 **§16.8 + §16.1（新）**；**当前由总管代管写权**（原持锁者 claude-65 已随重启消失，见 `V7_COORDINATION.md` §二 注记） |
+| 内存 | 物理 16 GB。M4 结束后稳定在 **物理可用 4+ GB / 提交可用 20 GB** |
 
 ---
 
@@ -37,27 +36,26 @@
 
 ---
 
-## 2. 你的第一个动作（5 分钟）
+## 2. 你的第一个动作（3 分钟）
 
 ```bash
 cd "d:/deeplearning_practice/存算一体"
-PY=/d/anaconda3/envs/pytorch_env/python
 
-# ① 训练在不在？（这是头号任务）
-powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"name='python.exe'\" | ? { \$_.CommandLine -like '*deep_robust*' } | Select ProcessId,CreationDate"
-tail -c 400 logs_v7_m4_watchdog.log
-ls -la --time-style=+%H:%M:%S checkpoints_cifar100/Exp3_FullRobust_resnet18_s44/best_model.pth
-#   进度看（v3 有输出重定向，这是唯一能看到 epoch 进度的地方）：
-tail -c 300 logs_v7_m4_restart_s44.err | tr -d '\r' | tail -2
+# ① 有没有长任务在跑？（正常情况下应该什么都没有 —— M4 已收工）
+powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"name='python.exe'\" | ? { \$_.CommandLine -like '*deep_robust*' -or \$_.CommandLine -like '*readout*' } | Select ProcessId,CommandLine"
 
 # ② 内存
-powershell -NoProfile -Command "\$os=Get-CimInstance Win32_OperatingSystem; '物理 ' + [math]::Round(\$os.FreePhysicalMemory/1MB,2) + ' GB | 提交 ' + [math]::Round(\$os.FreeVirtualMemory/1MB,2) + ' GB'"
+powershell -NoProfile -Command "\$os=Get-CimInstance Win32_OperatingSystem; '物理可用 ' + [math]::Round(\$os.FreePhysicalMemory/1MB,2) + ' GB | 提交可用 ' + [math]::Round(\$os.FreeVirtualMemory/1MB,2) + ' GB'"
 
-# ③ 论文干净（⚠ 六次 xelatex，内存紧时先别跑）
-PYTHONIOENCODING=utf-8 $PY tools/check_papers.py     # 退出码 0
+# ③ 论文干净（⚠ 六次 xelatex；改过 paper/ 之后必跑）
+PYTHONIOENCODING=utf-8 /d/anaconda3/envs/pytorch_env/python tools/check_papers.py     # 退出码 0
+
+# ④ 工作区
+git status --short
 ```
 
 ### 2·补、**开机 / 重启后必做**（这个项目已经被重启坑过两次）
+> ⚠ **当前无长任务**（M4 已收工），以下命令留给**将来开长任务时**用。
 
 ```bash
 # 训练 + 守护 两个进程都在不在？
@@ -69,6 +67,11 @@ ls outputs_cifar100/extension6_deep_robust/resnet18_exp3_s4{3,4}/metrics.json
 
 # 不在就重新拉起守护：
 powershell -NoProfile -Command "Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile','-File','d:\deeplearning_practice\存算一体\tools\v7_m4_watchdog.ps1' -WindowStyle Hidden"
+
+# 读出衔接脚本 —— ⚠ **已跑完并正常退出**（4/4 CSV 均在），下面仅供将来复用参考：
+tail -c 300 logs_v7_m4_readout.log      # 尾行应为 readout runner exited ...
+# 若有新的一批主干要补读出，改 tools/v7_m4_readout.ps1 里的 $runs 后重新拉起（幂等：已存在的 CSV 会跳过）：
+powershell -NoProfile -Command "Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile','-File','d:\deeplearning_practice\存算一体\tools\v7_m4_readout.ps1' -WindowStyle Hidden"
 ```
 
 > 🔴 **守护进程脱离得了"会话"，脱离不了"机器重启"。** 已实测两次（9/24 18:35、9/25 早上）。
@@ -76,18 +79,40 @@ powershell -NoProfile -Command "Start-Process -FilePath 'powershell.exe' -Argume
 
 ---
 
-## 3. M4 收尾（**唯一在跑的事，也是投不投稿的前提**）
+## 3. M4：**已完成（2026-09-25 18:19）**
 
-### 当前进度
-
-| run | 配置 | 状态 |
+| run | 配置 | 结果 |
 |---|---|---|
 | 1/4 | vgg11/exp2/s43/120ep | ✅ best **67.86** |
 | 2/4 | vgg11/exp2/s44/120ep | ✅ best **67.64** |
-| 3/4 | resnet18/exp3/s43/200ep | ✅ **完成（`metrics.json` total_epochs=200, best 72.79）** |
-| 4/4 | resnet18/exp3/s44/200ep | ⏳ **在跑**，ETA **≈17:54** |
+| 3/4 | resnet18/exp3/s43/200ep | ✅ best **72.79** |
+| 4/4 | resnet18/exp3/s44/200ep | ✅ best **73.09** |
+
+**判决：分支 ②（1.5~3 pp）** —— 两组 × 两行共 6 个主干级 std 中最大者 = **2.6087**
+（ResNet-18、`e_readout_NAT` 行、α=+0.3）。**未命中 ③ ⇒ 未触发止损线 1，Central Claim 不收缩。**
+
+| 组 | 主干级 std（尾部） | 读出级 std（尾部） | 比值 |
+|---|---|---|---|
+| VGG-11 / Exp2 | **0.2453** | 3.1788 | 0.08× |
+| ResNet-18 / Exp3 | **2.6087** | 3.3956 | 0.77× |
+
+⇒ **主干级方差小于读出级** ⇒ 论文印出的 $\pm3.40$ 没有低估总不确定度（它本就是两者中较大的）。
+
+**⚠ 两个口径不能混**：`tab:nat` 的 `26.82±3.40` 是**读出种子**口径（固定主干、换读出种子）；
+M4 的 `22.91±2.61` 是**主干种子**口径（固定读出 seed 42、换主干）。**只有一格重合，不可相减或互替。**
+
+**完整记录**：台账 **§16.1**（闸门核验表、两种子原始值、执行偏差、产物清单）。
+**论文已同步**：局限 (2) 改写为"已补测"、`tab:nat` 口径段加 ③、三级可分辨性下界 `±0.39` → `±0.25`。
+**产物**：4 个读出 CSV（`…_bs{43,44}_ep24_…`）、`logs_v7_m4_readout.log`、`outputs_cifar100/v7_M4_audit/M4_EXECUTION_PLAN.md`。
+
+### 历史存档：跑完之后的四步（**已完成，保留供回溯**）
 
 ### 跑完之后（**严格按 `docs/V7_M4_RUNBOOK.md`**）
+
+> 🆕 **步骤 1–2 已由 `tools/v7_m4_readout.ps1` 自动执行**（2026-09-25 16:21 起）。
+> 它做：等 4 个 `metrics.json` 全就绪 → **复查闸门** → 串行跑 4 次读出 → 每次跑完做配对检查（≤0.01 PASS / ≥0.02 停）。
+> 它**不做**：算方差、判决、改论文——**那三步仍然是人（你）的**。
+> ⚠ **若脚本中途停住**，日志最后一行会写 `=== readout runner exited (...)` 并给出原因。
 
 1. **🔴 前置闸门（不做不许开跑）**：对每个主干先确认
    `outputs_cifar100/extension6_deep_robust/<dir>/metrics.json` 存在**且 `total_epochs` 正确**
@@ -108,24 +133,68 @@ powershell -NoProfile -Command "Start-Process -FilePath 'powershell.exe' -Argume
 
 ---
 
-## 4. 论文状态：**已完成，但还不能投**
+## 4. 论文状态：**已完成，且已同步 M4**
 
 | | |
 |---|---|
-| 三份稿 | journal **28 页** / technical-report **24 页** / competition **13 页** |
+| 三份稿 | journal **29 页** / technical-report **24 页** / competition **13 页** |
 | 检查器 | ✅ **EXIT=0**（0 错误 / 0 未定义引用 / 0 markdown 残留）|
-| 修复轮次 | **A/B/C/D/E 五组 + 跨文档一致性 + 两次独立体检**，共百余处 |
-| 工作树 | 干净（最后一次 `666f94a`）|
+| 修复轮次 | **A/B/C/D/E 五组 + 跨文档一致性 + 两次独立体检 + M4 同步**，共百余处 |
+| 工作树 | **有未提交改动**（M4 相关的 `docs/`、`paper/`、`tools/`）|
 
-### 🔴 投稿前必须先做的两件事
+### M4 带来的改动（2026-09-25）
 
-1. **等 M4 出数**（§3）。论文局限 (2) 已把"深层全部差值无法裁决"写死（这点做得对），
-   但 **M4 是唯一可能让中心结论收缩的实验** ⇒ **没出数之前不该投。**
-2. **排版项（未处理，如实留档）**：三份稿**全程使用 ASCII 双引号**
-   （journal 306 / tech 172，**中文弯引号 0 个**）。**能编译、且全文一致**，属排版不是错误。
+1. **局限 (2) 改写**（journal + technical-report）：从"深层主干是单次训练产物…无法裁决"
+   改成"**已补测**：主干级 std 0.25 / 2.61，均小于读出级 3.18 / 3.40"；
+   门控红利 $-1.14$ 仍不可裁决，但理由从"没有测"变成"测了，方差确实盖得住它"。
+2. **`tab:nat` 口径段加第 ③ 条**：说明该表的 $\pm$ 是"读出种子"口径，
+   与"主干种子"口径（22.91±2.61）**只有一格重合、不可相减或互替**。
+3. **三级可分辨性表**下界 `±0.39` → `±0.25`，并注明第 ① 级含两类种子。
+
+### 🆕 外部体检（2026-09-25 晚，用户指派 `claude-ae`）已处置
+
+**报告**：`docs/verify/PAPER_EXTERNAL_REVIEW.md`（566 行，**无 CRITICAL**）
+**处置记录**：`docs/EXTERNAL_REVIEW_DISPOSITION.md`（含我逐条的独立验证）
+
+- ✅ **已修 10 处**：H-1（三级可分辨性下界，**是我自己引入的错**）、H-4（附录 A 表被裁，已渲染 PDF 复核）、
+  H-3（tech「正在测量中」与事实不符）、M-1/M-2a/M-2b（摘要措辞强度）、M-3（competition 结论缺限定）、
+  M-5（局限 (11) 描述重合）、M-6（tech 缺 `\cite{mtjcal}` 及 bibitem）
+- ⏳ **留用户裁决 4 组**：**H-2**（「方差」应为「标准差」，5 处 —— **内部已裁决过"不改"，推翻需用户点头**）、
+  M-4（competition 是否按赛题冻结）、M-7（无编号表格）、L 档 9 条
+- ✅ **验证**：`check_papers.py` EXIT=0；journal overfull **8 → 5 处、最大 390.8 → 37.5 pt**（全部 < 右边距，**不再有内容被裁**）
+
+**第二轮（66 页 PDF 全量目视，用户批准）—— 又抓到 CRITICAL**
+
+- 🔴 **圈码 `①`-`⑥` 与 `⇒` 在成品里 100% 不渲染**（三份稿共 46 处）：
+  xelatex 把字体里没有的字符**静默丢掉** —— 不报错、不影响退出码，但成品里一个都没有。
+  后果是**编号句被打穿**（「第 `①` 级含两类种子」→「第 ␣ 级…」）。
+  **已修**：三份稿导言区加三行（见坑表）；**并目视确认** p.21 的 `⇒`、p.22 的 `①②③` 全部正常渲染。
+- 🔴 tech 另有两处内容被裁（99.06 / 90.20 pt）—— **第一轮只修了 journal，漏了 tech**。已修。
+- 🆕 **`check_papers.py` 加了两条判据**：`Missing character == 0` 与 `Overfull ≤ 68.2pt`（= 右边距）。
+  这两条**能拦住本轮全部 3 条 HIGH**；它们此前全都逃过了闸门。
+- ⚠ **新坑：一次三层嵌套的工具事故**（完整留档在坑表 + `EXTERNAL_REVIEW_DISPOSITION.md` §8）：
+  ① 本机**两个 `pdftotext`**（默认命中的 mingw64 版不加 `-enc UTF-8` **静默丢掉全部非 ASCII**）；
+  ② **计法**（`grep -c` 数的是行；`grep -o` 对 TeX Live 版欠计数）；
+  ③ **字节层**（两份输出行数差近一倍、TeX Live 那份含 **1019 个 NUL** ⇒ 被 `grep` 当二进制）。
+  ⇒ **数 CJK 次数一律用 Python `str.count`**；**报告"成品里没有 X"之前先做阳性对照**。
+  ⚠ **总管在这条上错了两次**（拿到 0 就下结论、没做对照；用"计数相同"推出"内容逐位一致"），**均由顾问纠正**。
+
+**第三轮：用户裁决后执行（"按影响分流"，26 处）**
+
+- ✅ **H-2 改**（推翻内部原裁决）：误用的「方差」→「**标准差**」7 处 + 名词性用法 6 处；
+  顺手修 L-3（「两个数值」→「三个」）
+- ✅ **M-4 改**：competition 补「**架构依赖**」限定（2 处）+ **范围声明**（摘要后）
+- ✅ **L 档 5 条改**：前九节→前十节、删修订痕迹、**「第七阶段」3 处**（顾问只报 1 处）、
+  摘要补定语、tech 著录统一
+- ⏸ **M-7 缓办**（等目标期刊定了按模板一次重排）；L-1 / L-9 不动
+- ⚠ **执行前我核出顾问清单 3 处偏差**：H-2 B 漏 1 处、L-5 漏 2 处、H-2 C 用的是改写前行号
+
+### 🔴 投稿前还剩的
+
+1. **排版项（未处理，如实留档）**：三份稿**全程使用 ASCII 双引号**
+   （**中文弯引号 0 个**）。**能编译、且全文一致**，属排版不是错误。
    **若最终投中文期刊，提交前应统一为中文弯引号并重编译。**
-
-**⚠ 目标期刊未定** ⇒ 格式合规无从查起。
+2. **格式合规**：**目标期刊未定** ⇒ 无从查起；**M-7（13 处无编号表）也等它**。
 
 ---
 
@@ -145,7 +214,7 @@ powershell -NoProfile -Command "Start-Process -FilePath 'powershell.exe' -Argume
 | **M10** | ≈8 h | ⚠ **需要新数据集 —— 止损线 5，必须先问用户** |
 | M15–M16 | 0 | 收尾（打 tag `v1.1`、台账归档、论文同步）|
 
-**已完成的**：M0b / M0c / M1 / M2 / M8 / M8b / M8d / M9b / M12 / §16.2a / §16.4 / §16.5a / §16.7 / §16.8
+**已完成的**：M0b / M0c / M1 / M2 / **M4** / M8 / M8b / M8d / M9b / M12 / §16.2a / §16.4 / §16.5a / §16.7 / §16.8
 
 ### 💡 一件我建议做但还没做的（对后面 50 小时 GPU 活价值很大）
 
@@ -161,11 +230,14 @@ powershell -NoProfile -Command "Start-Process -FilePath 'powershell.exe' -Argume
 
 ## 6. 当前没有需要用户裁决的阻塞项
 
+**M4 已判决（分支 ②），不需要裁决** —— 它没有触发止损线。
+
 **两件待用户决定**（都不阻塞当下）：
 1. **M10 需不需要新数据集**（止损线 5 —— 动手前必须先问）
 2. **目标期刊**（定了才能做格式合规与引号统一）
 
-**M4 若命中分支 ③，必须停下报告用户，不自行继续。**
+**下一步的优先级建议**：M8c（LP-FT，≈4 h，★有文献支撑且**若成立会让论文某句要加限定**）
+> M5（≈2 h）> 其余。**全部要 GPU，必须串行。**
 
 ---
 
