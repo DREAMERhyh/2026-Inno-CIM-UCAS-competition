@@ -69,7 +69,18 @@ $runs = @(
 #   torch.AcceleratorError: CUDA error: out of memory
 # while 7 GB of VRAM was FREE -- i.e. it was host memory / WDDM that failed,
 # not VRAM. Free physical was 0.6 GB and commit was 1.46 GB at the time.
-$MIN_FREE_PHYS_MB = 1500
+# GATE CALIBRATION, 2026-09-25 (third revision).
+# v2 gated on free PHYSICAL only, at 1500 MB. On 2026-09-25 12:04 that blocked a
+# launch at free physical = 1104 MB while free COMMIT was ~25 GB -- i.e. it
+# blocked on the wrong metric.
+#   What actually failed on 2026-09-24:  CUDA error: out of memory
+#     at free physical 0.6 GB AND free commit 1.46 GB  (VRAM was 7 GB free).
+#   "out of memory" is an ALLOCATION failure => COMMIT is the metric that
+#   responds to it. Physical matters too, but the observed failure threshold
+#   there is ~0.6 GB, not 1.5 GB.
+# => gate on BOTH: commit is the primary guard, physical a secondary one.
+$MIN_FREE_PHYS_MB   = 800      # was 1500; the observed failure was at 600
+$MIN_FREE_COMMIT_MB = 4000     # primary guard; failure observed at 1460
 
 function Write-Log($msg) {
     $line = (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + '  ' + $msg
@@ -86,6 +97,13 @@ function Get-FreePhysicalMB {
     try {
         $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
         return [int]($os.FreePhysicalMemory / 1KB)
+    } catch { return -1 }
+}
+
+function Get-FreeCommitMB {
+    try {
+        $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+        return [int]($os.FreeVirtualMemory / 1KB)
     } catch { return -1 }
 }
 
@@ -141,14 +159,21 @@ while ($true) {
     Write-Log ('!! training gone for ' + $ABSENT_NEEDED + ' consecutive checks; ' + $missing.Count + ' run(s) left => taking over')
     $absentCount = 0
 
-    # (4) memory gate -- do NOT launch into a memory-starved machine
+    # (4) memory gate -- do NOT launch into a memory-starved machine.
+    # Check BOTH metrics (calibration note at the top of this file).
+    # !! Do NOT reset $absentCount here. Resetting it means every deferral costs
+    # ANOTHER full 5-check cycle. Observed 2026-09-25: 19:24:31 deferred ->
+    # 19:29:32 restarted counting at (1/5) -> 19:33:35 finally took over.
+    # Leaving it >= ABSENT_NEEDED makes each loop retry the gate directly.
     $fp = Get-FreePhysicalMB
-    if ($fp -ge 0 -and $fp -lt $MIN_FREE_PHYS_MB) {
-        Write-Log ('!! memory gate: free physical = ' + $fp + ' MB (< ' + $MIN_FREE_PHYS_MB + ' MB) -> NOT launching; will re-check in 5 min')
+    $fc = Get-FreeCommitMB
+    if (($fp -ge 0 -and $fp -lt $MIN_FREE_PHYS_MB) -or ($fc -ge 0 -and $fc -lt $MIN_FREE_COMMIT_MB)) {
+        Write-Log ('!! memory gate: free physical = ' + $fp + ' MB (< ' + $MIN_FREE_PHYS_MB + ') or free commit = ' + $fc + ' MB (< ' + $MIN_FREE_COMMIT_MB + ') -> NOT launching; retry in 5 min')
         Start-Sleep -Seconds 300
         continue
     }
-    Write-Log ('memory gate ok: free physical = ' + $fp + ' MB')
+    Write-Log ('memory gate ok: free physical = ' + $fp + ' MB, free commit = ' + $fc + ' MB')
+    $absentCount = 0
 
     # (3) backoff after consecutive crashes
     if ($consecutiveCrashes -gt 0) {
