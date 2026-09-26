@@ -308,6 +308,11 @@ def f05():
 def f06():
     p("\n[F6] 秩损失 vs 读出恢复率")
     specs = [
+        # 第 4 个容量档（M5，台账 §16.10）。它的秩损失 19.9% 与 SimpleCNN 的 20.6%
+        # 几乎重合，恢复率却差 4.0 pp —— 这正是本图现在要传达的第二层信息。
+        ("Wide-CNN", "outputs_cifar100/v5_rank_collapse/rank_stats_widecnn_m5.csv",
+         [f"outputs_cifar100/v3_readout_repair/readout_repair_c100_widecnn_m5_ep24_alpha+0.30_n20000{x}.csv"
+          for x in ("", "_s43", "_s44")]),
         ("SimpleCNN", "outputs_cifar100/v5_rank_collapse/rank_stats.csv",
          ["outputs_cifar100/v3_readout_repair/readout_repair_c100_clean_ep24_alpha+0.30_n20000.csv",
           "outputs_cifar100/v3_readout_repair/readout_repair_c100_plain_s43_ep24_alpha+0.30_n20000_s43.csv",
@@ -341,20 +346,34 @@ def f06():
         p(f"  {name:10s} 秩损失={loss:.1f}%  恢复率={rec:.1f}%")
 
     if len(pts) >= 2:
+        pts.sort()   # 按秩损失排序 —— specs 的书写顺序不再影响折线走向
         # 高度 3.4 → 3.2：轴范围留白后总高微涨，压低绘图区抵消（比例 1.396 → 约 1.40）
         fig, ax = plt.subplots(figsize=(4.8, 3.2))
         xs = [q[0] for q in pts]
         ys = [q[1] for q in pts]
         ax.plot(xs, ys, "o-", color=WONG[5], lw=1.6, ms=7)
+        # 最左两点（Wide-CNN 19.9% 与 SimpleCNN 20.6%）横向几乎重合，标签必须错开
+        off = {"Wide-CNN": (-3, -14), "SimpleCNN": (6, 3)}
         for x_, y_, n_ in pts:
-            ax.annotate(n_, (x_, y_), xytext=(6, 4), textcoords="offset points", fontsize=8)
+            ax.annotate(n_, (x_, y_), xytext=off.get(n_, (6, 4)),
+                        textcoords="offset points", fontsize=8)
+        # 最左两点是本节的新发现：秩损失只差 0.7 pp，恢复率却差 4.0 pp。
+        # 左上角被四个标签占满（放文字必与折线或标签相撞），所以写在左下空白区、
+        # 用"左端两点"点明所指，不画引线。
+        if len(pts) >= 2 and (pts[1][0] - pts[0][0]) < 2.0:
+            (x0, y0, _), (x1, y1, _) = pts[0], pts[1]
+            ax.text(0.03, 0.05,
+                    f"左端两点：$\\Delta$秩损失 {x1 - x0:.1f} pp，"
+                    f"$\\Delta$恢复率 {y1 - y0:+.1f} pp",
+                    transform=ax.transAxes, fontsize=7.5, color=BASE,
+                    ha="left", va="bottom")
         # 四周留白：原先 SimpleCNN 的标注压在上边框、ResNet-18 的越出右边框
         ax.set_xlim(min(xs) - 4, max(xs) + 7)
-        ax.set_ylim(min(ys) - 6, max(ys) + 6)
+        ax.set_ylim(min(ys) - 8, max(ys) + 6)
         r = np.corrcoef(xs, ys)[0, 1]
         ax.set_xlabel("有效秩损失 @ $\\alpha=+0.3$ (%)")
         ax.set_ylabel("读出恢复率 @ $\\alpha=+0.3$ (%)")
-        ax.set_title(f"逐点 Pearson $r = {r:.3f}$（三点，不足以定曲线形状）", fontsize=9)
+        ax.set_title(f"逐点 Pearson $r = {r:.3f}$（四点，仍不足以定曲线形状）", fontsize=9)
         save(fig, "F06_rank_vs_recovery")
 
 

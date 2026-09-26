@@ -1,0 +1,117 @@
+% !TEX program = xelatex
+% 导师评审用的一页进展摘要 —— 不是投稿稿，是"目前状况如何"的入口文件。
+% 详细内容：paper/journal/（期刊稿）与 paper/technical-report/（技术报告）。
+% 编译：xelatex main.tex （连续两次）
+\documentclass[10pt,a4paper]{ctexart}
+
+\usepackage[a4paper,left=1.9cm,right=1.9cm,top=1.7cm,bottom=1.5cm]{geometry}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{caption}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+% 圈码 ①-⑥ 与 ⇒ 的缺字形修复（xelatex 会把字体里没有的字符**静默丢掉**）
+\usepackage{newunicodechar}
+\xeCJKDeclareCharClass{CJK}{"2460 -> "24FF}
+\newunicodechar{⇒}{\ensuremath{\Rightarrow}}
+
+\captionsetup{font=small,labelfont=bf}
+\setlength{\parindent}{0em}
+\setlength{\parskip}{0.18em}
+\linespread{0.96}
+\emergencystretch=2em
+\pagestyle{empty}
+
+\newcommand{\hl}[1]{\textbf{#1}}
+\newcommand{\sect}[1]{\vspace{0.15em}\noindent{\large\bfseries #1}\par\vspace{0.05em}}
+
+\title{\vspace{-2.6em}\bfseries 存算一体非线性失真的读出适配\\[2pt]
+       \large ——进展摘要与当前状况（2026-09-26）}
+\author{\small 黄奕皓 \quad 中国科学院大学 计算机科学与技术 \quad \texttt{huangyihao24@mails.ucas.ac.cn}}
+\date{}
+
+\begin{document}
+\maketitle
+\vspace{-3.2em}
+
+\begin{center}
+\small\itshape
+方法与此处的每个数字见 \texttt{paper/journal/}（期刊稿，31 页）与
+\texttt{paper/technical-report/}（技术报告，27 页）；全部数字可追溯到仓库内的产物文件。
+\end{center}
+
+\sect{一、在问什么}
+存算一体把乘累加放在模拟域、权重固化在阵列里，代价是模拟器件的非理想性直接进入计算通路。
+按赛题给定模型，输入相关的非线性失真写成逐样本归一化后的三次多项式
+$y=\alpha\hat{x}^3+(1-\alpha)\hat{x}$——它\hl{确定、与输入幅度相关、逐层累积}，不同于常见扰动。
+工程上有两条硬约束：\hl{阵列里的权重不可重训}（这正是 CiM 省功耗的前提），
+且投片后只能改数字域。本文要回答的不是"怎么让网络更鲁棒"，
+而是\hl{在权重不可动的前提下，鲁棒性的杠杆究竟在哪一层}。
+
+\sect{二、中心结论}
+\hl{灾难尾（$\alpha=+0.3$）丢的是读出的可解码性，不是表征里的信息。}
+在冻结主干的末端特征上重训一个线性探针，$\alpha=+0.3$ 可达 $48.35\%$，
+而模型自带的分类头只有 $28.09\%$——\hl{headroom 20.26 个百分点}；
+同一套探针在加性高斯噪声这条对照通路上只有 $7.50$ 个百分点。
+该读数经四路主动加固（随机标签、激活噪声临界点、划分重采样、不相交划分），\hl{四路都未能否证它}；
+探针样本加到 50000 后升至 $+27.63$，\hl{且仍未饱和}。
+
+由此得到修复路径：\hl{冻结全部主干权重、只重训最后一个线性层}——
+三个主干上尾部从 $28.09/15.98/6.22$ 提升到 $\mathbf{43.31/47.79/26.82}$，
+成本为主干重训的 $1/5\sim1/16$，\hl{一致超过所有全网络鲁棒训练配方}。
+架构端另有一个\hl{零训练成本}的第二杠杆：把最大池化层从 2 个增加到 5 个（参数量不变），
+同协议同 seed 配对下 $+15.52$ 个百分点。两个杠杆在尾部可同时受益，但\hl{不独立相加}。
+反过来，\hl{训练端的五条补救路径没有一条改善尾部}。
+
+\sect{三、主要证据一览}
+\begin{center}
+\small
+\begin{tabular}{p{4.4cm}p{3.4cm}p{7.6cm}}
+\toprule
+量 & 取值 & 说明 \\
+\midrule
+探针 headroom @$+0.3$ & $\mathbf{+20.26}$ & 高斯噪声对照仅 $+7.50$；样本加到 5 万后升至 $+27.63$ \\
+读出适配 @$+0.3$（三主干） & $\mathbf{43.31/47.79/26.82}$ & 各 3 seed；超过全部全网络鲁棒训练配方 \\
+池化密度 $2\to5$ @$+0.3$ & $\mathbf{+15.52}$ & 同协议同 seed 配对，参数量与训练成本均为零 \\
+训练端五条路径 & 无一改善 & 四条采样类无效；第五条（解冻微调）\hl{反而大幅变差} \\
+秩损失 $\to$ 恢复率 & $r=-0.934$（四点） & 秩损失\hl{不是}恢复率的唯一决定因素 \\
+\midrule
+过程自由度 $\Delta_{\text{proc}}$ & $3.45$ pp & 同数据同特征、只换拟合过程；混协议则会把标准差估高六倍 \\
+跨实现尾部差 & $5.55$ pp（$z=9.4$） & \hl{经三次干预仍未归因} ⇒ 归因前不跨实现引用精度数字 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\sect{四、已排除的方向（阴性结果同样是结论）}
+以下方向\hl{已被实验否证}，不建议再列为候选：训练期采样设计四条（预算分配 / 对抗训练 /
+课程式采样 / 范围外推）、\hl{先训读出再解冻主干微调}（三主干一致大幅下降，说明微调破坏了预训练特征）、
+ETF 与原型读出、"少样本即可恢复全表示"、门控的装前自检、
+"读出容量是瓶颈"（测过 k-NN 与两种 MLP 后，线性头仍最优）。
+
+\sect{五、还没解决的}
+\begin{itemize}[leftmargin=1.4em,itemsep=1pt,topsep=1pt,parsep=0pt]
+  \item \hl{全部结果来自仿真，没有硬件实测}；若真实 CiM 的失真形态不同，headroom 还有多大，本文无法回答。
+  \item \hl{秩损失之外还有一个未识别的变量}：两个主干的秩损失只差 0.7 个百分点，恢复率却差 4.0 个百分点。
+        找出它，是把"可恢复量"写成一个可预测上界的前提。
+  \item \hl{跨实现的 5.55 个百分点差异未归因}（换评估路径已验证无效，须动训练循环做二分）；
+        池化保护的机制分解，两条子问题都判为不可分辨。
+  \item 读出杠杆只在 $|\alpha|\le0.3$ 窗口内评估过，而窗口之外恰是自带头最需要被救的地方。
+\end{itemize}
+
+\sect{六、还剩多少活}
+已完成 13 项里程碑（M0b$\sim$M14b）。尚未开始的主要有：M6 换效应对照（$\approx$10 h）、
+M7 跨实现二分（须动训练循环）、M9 找出秩损失之外那个变量（$\approx$6 h）、
+M11 三头路由（$\approx$6 h）、M13 失真形态族（$\approx$12 h）、M14 架构杠杆系统搜索（$\approx$10 h）；
+另有 M10 需新数据集，按项目自订的止损线须先确认。\hl{全部需要 GPU，必须串行。}
+
+\vspace{0.2em}
+\noindent\rule{\textwidth}{0.4pt}
+
+\noindent\small
+\textbf{关于可信度}：每条结论都执行"跑前写死判据、跑后不改"，保留全部阴性结果与三次
+"先归因、后被自己数据否证"的记录。所有数字可追溯到仓库内产物；\hl{不引用任何未逐字核实过的文献}。
+
+\end{document}

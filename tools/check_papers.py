@@ -26,10 +26,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from static_tex_check import run as static_run  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-PAPERS = ["journal", "technical-report", "competition"]
+PAPERS = ["journal", "technical-report", "competition", "advisor-summary"]
 TEXBIN = "/d/texlive/2025/bin/windows"
-# 三份稿的 geometry 都是 left=2.4cm,right=2.4cm ⇒ 右边距 2.4cm = 68.29pt。
+# 前三份稿的 geometry 都是 left=2.4cm,right=2.4cm ⇒ 右边距 2.4cm = 68.29pt。
 # 排版溢出超过这个值的部分**会被裁到纸外**（不是"不好看"，是内容丢失）。
+# ⚠ advisor-summary 的边距是 1.9cm（右边距 53.9pt），比这个阈值更紧；
+#    它当前 0 处溢出，故沿用同一个保守阈值（用更宽的阈值只会漏报，不会误报）。
 RIGHT_MARGIN_PT = 68.2
 
 
@@ -74,7 +76,9 @@ def compile_paper(name):
     if not os.path.exists(log):
         return None, -1, -1, -1, -1.0
     txt = open(log, encoding="utf-8", errors="replace").read()
-    pages = re.search(r"Output written on main\.pdf \((\d+) pages", txt)
+    # ⚠ "pages" 必须写成 "pages?"：xelatex 对**单页**文档写的是 "(1 page"（单数）。
+    # 漏掉这个 s 会让任何 1 页的稿子被误报成"编译失败"（2026-09-26 加 advisor-summary 时踩到）。
+    pages = re.search(r"Output written on main\.pdf \((\d+) pages?", txt)
     over = [float(x) for x in re.findall(r"Overfull \\hbox \(([0-9.]+)pt too wide\)", txt)]
     return (int(pages.group(1)) if pages else None,
             len(re.findall(r"^!", txt, re.M)),
