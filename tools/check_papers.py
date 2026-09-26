@@ -17,6 +17,7 @@
 
 退出码：0 = 全部通过；1 = 有问题。
 """
+import hashlib
 import os
 import re
 import subprocess
@@ -27,7 +28,16 @@ from static_tex_check import run as static_run  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 PAPERS = ["journal", "technical-report", "competition", "advisor-summary"]
-TEXBIN = "/d/texlive/2025/bin/windows"
+# ⚠ 必须是 **Windows 绝对路径**。原先写的是 `/d/texlive/2025/bin/windows`（Git Bash 写法），
+#   Python 在 Windows 上根本不认这个目录 ⇒ env["PATH"] 里塞进去的是个无效条目，
+#   这个"强制 TeX Live 优先"的设定**一直是空操作**（能跑通只是因为 TeX Live 本来就在
+#   系统 PATH 上）。2026-09-26 查 pdftotext 时顺带发现并修正。
+TEXBIN = r"D:\texlive\2025\bin\windows"
+# ⚠ pdftotext 必须用**绝对路径**调，不许走 PATH：
+#   本机有两个 pdftotext，PATH 上先命中的是 `/mingw64/bin/pdftotext`，
+#   它不加 `-enc UTF-8`（或即使加了，行为也不同）会**静默丢掉全部非 ASCII**。
+#   本项目在这上面栽过三次（见 docs/V7_COORDINATION.md 坑表）。
+PDFTOTEXT = os.path.join(TEXBIN, "pdftotext.exe")
 # 前三份稿的 geometry 都是 left=2.4cm,right=2.4cm ⇒ 右边距 2.4cm = 68.29pt。
 # 排版溢出超过这个值的部分**会被裁到纸外**（不是"不好看"，是内容丢失）。
 # ⚠ advisor-summary 的边距是 1.9cm（右边距 53.9pt），比这个阈值更紧；
@@ -231,24 +241,62 @@ def _used_figures(tex_path):
     return out
 
 
-def deliverable_stale(name):
-    """交付物 `main.pdf` 是不是比"源"旧？返回 (是否过期, 最新的那个源文件)。
+def _pdf_text_fingerprint(pdf_path):
+    """(文本层字符数, 文本层 sha256 前 16 位)。用 **TeX Live 的 pdftotext 绝对路径**。
+
+    ⚠ 不许走 PATH —— 本机 PATH 上先命中的是 mingw64 那个，它会静默丢掉全部非 ASCII。
+    实测（2026-09-26）：同一份源编两遍，四份稿的文本层指纹**逐字节相同**，
+    故"文本层不同"可以当**确定性判据**用（零误报）。
+    """
+    if not (os.path.exists(pdf_path) and os.path.exists(PDFTOTEXT)):
+        return None
+    r = subprocess.run([PDFTOTEXT, "-enc", "UTF-8", pdf_path, "-"], capture_output=True)
+    t = r.stdout.decode("utf-8", "replace")
+    return (len(t), hashlib.sha256(t.encode("utf-8")).hexdigest()[:16])
+
+
+def deliverable_stale(name, check_pdf=None):
+    """交付物 `main.pdf` 是否与"源"不同代？返回 (等级, 说明)；等级 ∈ {None,'stale','hint'}。
 
     **为什么要补这一条**：2026-09-26 把编译改成 `-jobname=_check`（检查器不再碰交付物）
     之后，**「检查器全绿但交付物已过期」变成可能，而且没有任何闸门能发现它**。
     改之前不会：那时检查器就地编，跑一次就把成品顺手更新了。
     这类事故的产物是"一份被评审/导师拿走的旧 PDF"，而**所有闸门都会显示绿**——
-    代价极不对称，故必须显式检。**补上之后，"绿"才重新等于"成品也是新的"。**
+    代价极不对称，故必须显式检。
 
-    判据：`main.pdf` 必须新于 `main.tex` **与它引用的每一张图**。
+    **两条判据，误报代价完全不同**：
+
+    1. **文本层不同**（`_check.pdf` 对 `main.pdf`）⇒ `('stale', ...)`【**确定性，零误报**】
+       实测同一份源编两遍文本层逐字节相同。覆盖一切**文字/数值/图注**改动。
+       ⚠ **已知盲区**：只重画图、连图注都不改 ⇒ 文本层不变 ⇒ **抓不到**（见第 2 条兜底）。
+
+    2. **用到的图比 `main.pdf` 新 60 秒以上** ⇒ `('hint', ...)`【**只能提示**】
+       ⚠ **为什么不直接比 mtime**：`git clone` / `checkout` 会把所有文件 mtime 重置成
+       取出时刻、**按写出顺序**，而 `paper/<name>/` 里字典序是 `main.pdf` 先于 `main.tex`
+       （'p' < 't'）⇒ **新克隆的仓库上会误报"什么都没改却过期"**。
+       2026-09-26 实测证实：克隆后 journal / technical-report / competition **三份齐报**。
+       ⇒ 故：**`.tex` 的 mtime 完全不用**（文本判据已覆盖它，而它正是误报来源）；
+         **图**保留 mtime，但要求**新 60 秒以上**（克隆只差约 1 毫秒）且**只作提示**。
     """
     d = os.path.join(ROOT, "paper", name)
     pdf, tex = os.path.join(d, "main.pdf"), os.path.join(d, "main.tex")
     if not (os.path.exists(pdf) and os.path.exists(tex)):
-        return False, None
-    srcs = [tex] + _used_figures(tex)
-    newest = max(srcs, key=os.path.getmtime)
-    return os.path.getmtime(pdf) < os.path.getmtime(newest), newest
+        return None, None
+    # 判据一：文本层（确定性）
+    if check_pdf and os.path.exists(check_pdf):
+        a, b = _pdf_text_fingerprint(pdf), _pdf_text_fingerprint(check_pdf)
+        if a and b and a != b:
+            return "stale", "文本层与源不同"
+    # 判据二：图比交付物新（提示性，留 60 秒余量避开 clone 的 mtime 重置）
+    picked, newest = None, 0.0
+    pdf_mt = os.path.getmtime(pdf)
+    for f in _used_figures(tex):
+        if os.path.getmtime(f) - pdf_mt > 60:
+            if os.path.getmtime(f) > newest:
+                picked, newest = f, os.path.getmtime(f)
+    if picked:
+        return "hint", f"图 {os.path.basename(picked)} 比 main.pdf 新 60 秒以上"
+    return None, None
 
 
 def compile_paper(name, emit=False):
@@ -275,11 +323,19 @@ def compile_paper(name, emit=False):
     env = dict(os.environ)
     env["PATH"] = TEXBIN + os.pathsep + env.get("PATH", "")
     job = "main" if emit else "_check"
-    for _ in range(2):
+    # ⚠ **三遍，不是两遍**。2026-09-26 在一个全新克隆上实测：
+    #   第 1 遍 TOC 还没生成、第 2 遍 **TOC 页码仍是错的**、**第 3 遍才收敛**
+    #   （文本层指纹到第 3 遍才与已提交的 PDF 逐字节相同）。
+    #   ⇒ 冷启动时编两遍会产出"**目录页码写错**"的 PDF —— 而它**编译不报错、
+    #     页数也对**，检查器会报绿。这是"交付物为什么是错的却看不出来"的又一个形态。
+    #   本机平时有 `.aux/.toc` 残留，所以两遍就够；**新克隆/清理后就不是了**。
+    for _ in range(3):
         sh(f"xelatex -jobname={job} -interaction=nonstopmode main.tex", cwd=d, env=env)
     log = os.path.join(d, f"{job}.log")
     if not os.path.exists(log):
-        return None, -1, -1, -1, -1.0
+        return None, -1, -1, -1, -1.0, (None, None)
+    stale = (None, None)
+    result = (None, -1, -1, -1, -1.0)
     try:
         txt = open(log, encoding="utf-8", errors="replace").read()
         # ⚠ "pages" 必须写成 "pages?"：xelatex 对**单页**文档写的是 "(1 page"（单数）。
@@ -291,10 +347,15 @@ def compile_paper(name, emit=False):
                   txt.count("undefined"),
                   txt.count("Missing character"),
                   max(over) if over else 0.0)
+        # ⚠ "交付物是否过期"必须**在这里**判 —— `_check.pdf` 还在。
+        #   放进 finally 之后才判会永远返回"没有过期"（2026-09-26 实测踩到：
+        #   清理先跑，_check.pdf 没了 ⇒ _pdf_text_fingerprint 返回 None ⇒ 判据静默失效）。
+        if not emit:
+            stale = deliverable_stale(name, check_pdf=os.path.join(d, "_check.pdf"))
     finally:
         if not emit:
             _cleanup_check_artifacts(d)
-    return result
+    return result + (stale,)
 
 
 def main():
@@ -333,7 +394,7 @@ def main():
         else:
             print(f"  ✓ 静态检查（不编译）：引用 / 引文 / 环境配平 / 花括号 / 行内 $ 全部通过"
                   + (f"（{n_swarn} 条提示）" if n_swarn else ""))
-        pages, errs, undef, missing, overmax = compile_paper(name, emit=args.emit)
+        pages, errs, undef, missing, overmax, stale = compile_paper(name, emit=args.emit)
         if probs:
             print(f"  ✗ 源码静态检查：{len(probs)} 处 markdown 残留")
             for p in probs:
@@ -369,11 +430,14 @@ def main():
         #   "源没问题但交付物是旧的"变成一个**没有任何闸门能发现**的失效 ——
         #   产物是"一份被评审/导师拿走的旧 PDF"，而所有检查都显示绿。故补这一条。
         if not args.emit:
-            stale, newest = deliverable_stale(name)
-            if stale:
-                print(f"  ⚠ **交付物可能过期**：main.pdf 比 "
-                      f"{os.path.relpath(newest, ROOT)} 旧 —— "
+            level, why = stale
+            if level == "stale":
+                print(f"  ✗ **交付物与源不同代**：{why} —— "
                       f"源改了但没跑 `--emit`（本检查只验源，不验成品）")
+                bad += 1
+            elif level == "hint":
+                print(f"  ⚠ **交付物可能过期**（提示，不计为错）：{why} —— "
+                      f"若是重画了图，请跑 `--emit`")
     print("\n" + "=" * 64)
     if bad:
         print(f"结果：{bad} 份有问题 —— **不要提交**")
