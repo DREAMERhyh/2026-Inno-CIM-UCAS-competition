@@ -69,11 +69,46 @@ def check_source(tex_path):
         body = re.sub(r"\\%", "", line)          # 先去掉合法的转义 \%
         for m in re.finditer(r"%(?=\s*$)", body):
             head = body[:m.start()]
-            if head and not head[-1].isspace() and not head.lstrip().startswith("%"):
+            # ⚠ 前面是 `}` 时交给下面那条判据 —— 因为 `}%` 有两种含义，只有它能分开：
+            #   `\textbf{20.26}%` = 漏写 \% ；`\newcommand{\x}{abc}%` = 吃换行的惯用法
+            if (head and not head[-1].isspace()
+                    and head[-1] != "}" and not head[-1].isdigit()
+                    and not head.lstrip().startswith("%")):
                 problems.append(f"    行 {i}: 裸 `%`（行尾、前面没空格）——"
                                 f"会被 LaTeX 当成注释符；若本意是百分号，成品里会少一个 `%`。"
                                 f"应写 `\\%`")
                 break
+        # 形态三：**行尾、`%` 前有空白、再前面是数字** —— 如 `headroom 20.26 %`。
+        # 只吞换行、危害最小，但它同样可能是漏写的 `\%`（成品里会少一个 %）。
+        # 判据收得很紧（必须"空白 + 数字"），故 `\clearpage  % 注释` 这类不会被误伤
+        # ——后者 `%` 后面还有正文，本来就不匹配 `%\s*$`。
+        for m in re.finditer(r"%(?=\s*$)", body):
+            head = body[:m.start()]
+            stripped = head.rstrip()
+            if (stripped and stripped[-1].isdigit() and len(stripped) < len(head)
+                    and not head.lstrip().startswith("%")):
+                problems.append(f"    行 {i}: 裸 `%`（行尾、前面是空格、再前面是数字）——"
+                                f"若本意是百分号，成品里会少一个 `%`。应写 `\\%`")
+                break
+        # 下面那条覆盖**行中**形态；它比行尾那种更危险——会吞掉**后面的正文**
+        # （行尾那种只吞换行）。2026-09-26 复核时由顾问指出漏了这一形态，总管复验成立。
+        # 判据取"紧邻前面是数字（或 `}` 而 `}` 前面是数字）"：
+        #   · `精度 20.26% 个百分点，见下文`  ⇒ 报（后面那句会消失）
+        #   · `\textbf{20.26}%`               ⇒ 报
+        #   · `\newcommand{\x}{abc}%`         ⇒ **不报**（`}` 前是字母，是 LaTeX 惯用法）
+        #   · `\foo%这个注释紧贴着`            ⇒ **不报**
+        for m in re.finditer(r"%", body):
+            head = body[:m.start()]
+            if not head or head.lstrip().startswith("%"):
+                continue
+            k = len(head) - 1
+            if not head[k].isdigit():            # 前面不是数字 ⇒ 再看是不是 `}` + 数字
+                if head[k] != "}" or k == 0 or not head[k - 1].isdigit():
+                    continue
+            problems.append(f"    行 {i}: 裸 `%` 紧跟在数字后面 —— "
+                            f"会把这行**后面剩下的正文整段吞掉**（比行尾那种更危险）。"
+                            f"应写 `\\%`")
+            break
         # \texttt{} 里的**未转义下划线**。
         # ⚠ 对比记忆：**`\path{}`（url 宏包）天生吃下划线，不用转义**；
         # 只有 `\texttt{}` 不行——`_` 在 text mode 是数学下标，报 "Missing $ inserted."。

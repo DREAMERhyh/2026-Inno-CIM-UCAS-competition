@@ -89,16 +89,21 @@
 \small
 \begin{tabular}{llc}
 \toprule
-你想知道什么 & 读哪里 & 节数估计 \\
+你想知道什么 & 读哪里 & 小节数 \\
 \midrule
-项目做出来的核心结论 & 第 \ref{sec:findings} 节（六阶段技术内容） & 5 \\
-某个方法为什么有效 & 第 \ref{sec:mechanism} 节（机制链） & 3 \\
-当初怎么走弯路的 & 第 \ref{sec:history} 节（三次翻案） & 3 \\
-能不能落到硬件上 & 第 \ref{sec:deploy} 节（工程推演） & 3 \\
-怎么复现一个数字 & 第 \ref{sec:repro} 节（三条命令） & 2 \\
-还有什么没做 & 第 \ref{sec:backlog} 节（停车场与入场券） & 3 \\
+项目做出来的核心结论 & 第 \ref{sec:findings} 节（六阶段技术内容） & 12 \\
+某个方法为什么有效 & 第 \ref{sec:mechanism}$\sim$\ref{sec:chain} 节（机制链） & 6 \\
+当初怎么走弯路的 & 第 \ref{sec:history} 节（三次翻案） & 4 \\
+能不能落到硬件上 & 第 \ref{sec:deploy} 节（工程推演） & 5 \\
+怎么复现一个数字 & 第 \ref{sec:repro} 节（三条命令） & 4 \\
+还有什么没做 & 第 \ref{sec:backlog} 节（停车场与入场券） & 4 \\
 \bottomrule
 \end{tabular}
+
+\vspace{2pt}
+{\footnotesize 「小节数」为各节当前的小节个数（手维护，加小节时请同步更新）。
+第二行此前写作「第 3.4 节（机制链）」——但 3.4 只是\textbf{单个}小节，
+机制链实为 3.4$\sim$3.9，已于 2026-09-26 改为区间。}
 \end{center}
 
 \textbf{本报告的性质}：它是一份\emph{归档}，不是一份投稿论文。
@@ -788,6 +793,7 @@ max 的选择性 & 换成 top-2 池化（与 $f_\alpha$ 不可交换）
 \textbf{若还要继续追这两条，预算应花在 $2\times$max 的更多种子上}
 （$5\times$max 一侧的种子方差已经小一个量级，加种子收益低）。
 
+\label{sec:chain}   % 机制链（§3.4~§3.9）到此为止；阅读指南用 \ref{sec:mechanism}~\ref{sec:chain} 指这一段
 \subsection{两个杠杆的叠加与在线估计}
 
 架构杠杆与读出杠杆在尾部\textbf{可以同时受益，但显著次可加、不是相加}：
