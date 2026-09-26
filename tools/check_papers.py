@@ -72,8 +72,31 @@ def _is_numeric(s):
     用途：区分 `\\textbf{20.26}%`（漏写 `\\%`）与
     `\\ref{sec:v7}%` / `\\cite{fragility2026}%`（都是吃换行的惯用法）。
     后两者以数字**结尾**但不是纯数字 —— 只看"前一个字符是数字"会两者全报。
+
+    ⚠ 但"纯数字"仍不够：`\\cite{2202.10054}%` 的键本身就是纯数字
+    （本项目真的引 arXiv 号），故还要靠 `_KEY_LIKE_CMDS` 再排一道。
     """
     return bool(re.fullmatch(r"[0-9][0-9.,\\ ]*", s.strip()))
+
+
+# 花括号里是**键或文件名**、不是数值的命令。它们后面紧跟 `%`（吃换行）是惯用法。
+_KEY_LIKE_CMDS = {
+    "cite", "citep", "citet", "ref", "eqref", "cref", "Cref",
+    "label", "includegraphics", "input", "include", "bibliography",
+}
+
+
+def _cmd_before_brace(head, inner):
+    """返回紧邻 `{` 前面的那个命令名（不含反斜杠）；没有则空串。
+
+    `head` 以 `}` 结尾，`inner` 是花括号里的内容 ⇒
+    `{` 的位置 = len(head) - len(inner) - 2。
+    """
+    brace = len(head) - len(inner) - 2
+    if brace < 0:
+        return ""
+    m = re.search(r"\\([A-Za-z]+)\s*$", head[:brace])
+    return m.group(1) if m else ""
 
 
 def check_source(tex_path):
@@ -148,7 +171,14 @@ def check_source(tex_path):
                 # `\textbf{20.26}%` ⇒ 是漏写；`\cite{fragility2026}%` / `\ref{sec:v7}%`
                 # ⇒ **不是**（它们是吃换行的惯用法）。切分靠"花括号里是不是纯数字"。
                 inner = _braced_inner(head)      # head 本身就以 `}` 结尾
-                if inner is None or not _is_numeric(inner):
+                if inner is None:
+                    continue
+                # ⚠ 但"纯数字"还不够：`\cite{2202.10054}%` / `\cite{2024}%` 的键
+                # **本身就是纯数字**（本项目真的引 arXiv 号）⇒ 会误报。
+                # 故再排掉"引用/包含类命令"——它们的花括号里是**键或文件名**，不是数值。
+                if _cmd_before_brace(head, inner) in _KEY_LIKE_CMDS:
+                    continue
+                if not _is_numeric(inner):
                     continue
             else:
                 continue
@@ -179,6 +209,46 @@ def _cleanup_check_artifacts(d):
                 os.remove(p)
             except OSError:
                 pass
+
+
+def _used_figures(tex_path):
+    """抽出这份 .tex 真正 `\\includegraphics` 的图，返回存在的文件路径。
+
+    ⚠ **必须把图算进去**：只比 `main.tex` 的 mtime 抓不到"重画了一张图但没改 .tex"
+    —— 2026-09-26 就刚重画过 F06，正是这个形态。
+    """
+    src = open(tex_path, encoding="utf-8", errors="replace").read()
+    src = re.sub(r"(?m)^\s*%.*$", "", src)        # 去整行注释，避免注释里的路径被算进来
+    d = os.path.dirname(tex_path)
+    out = []
+    for n in re.findall(r"\\includegraphics(?:\[[^\]]*\])?\{([^}]+)\}", src):
+        n = n.strip()
+        for cand in (n, os.path.join("..", "figures", n)):
+            p = os.path.normpath(os.path.join(d, cand))
+            if os.path.exists(p):
+                out.append(p)
+                break
+    return out
+
+
+def deliverable_stale(name):
+    """交付物 `main.pdf` 是不是比"源"旧？返回 (是否过期, 最新的那个源文件)。
+
+    **为什么要补这一条**：2026-09-26 把编译改成 `-jobname=_check`（检查器不再碰交付物）
+    之后，**「检查器全绿但交付物已过期」变成可能，而且没有任何闸门能发现它**。
+    改之前不会：那时检查器就地编，跑一次就把成品顺手更新了。
+    这类事故的产物是"一份被评审/导师拿走的旧 PDF"，而**所有闸门都会显示绿**——
+    代价极不对称，故必须显式检。**补上之后，"绿"才重新等于"成品也是新的"。**
+
+    判据：`main.pdf` 必须新于 `main.tex` **与它引用的每一张图**。
+    """
+    d = os.path.join(ROOT, "paper", name)
+    pdf, tex = os.path.join(d, "main.pdf"), os.path.join(d, "main.tex")
+    if not (os.path.exists(pdf) and os.path.exists(tex)):
+        return False, None
+    srcs = [tex] + _used_figures(tex)
+    newest = max(srcs, key=os.path.getmtime)
+    return os.path.getmtime(pdf) < os.path.getmtime(newest), newest
 
 
 def compile_paper(name, emit=False):
@@ -294,6 +364,16 @@ def main():
             print(f"  ✓ 排版溢出：最大 {overmax:.1f}pt ≤ {RIGHT_MARGIN_PT}pt（右边距之内）")
         else:
             print("  ✓ 排版溢出：无")
+        # 交付物是否与源同代。
+        # ⚠ 上面的判据**全部只验源**（.tex → _check.pdf）。改成两段式编译之后，
+        #   "源没问题但交付物是旧的"变成一个**没有任何闸门能发现**的失效 ——
+        #   产物是"一份被评审/导师拿走的旧 PDF"，而所有检查都显示绿。故补这一条。
+        if not args.emit:
+            stale, newest = deliverable_stale(name)
+            if stale:
+                print(f"  ⚠ **交付物可能过期**：main.pdf 比 "
+                      f"{os.path.relpath(newest, ROOT)} 旧 —— "
+                      f"源改了但没跑 `--emit`（本检查只验源，不验成品）")
     print("\n" + "=" * 64)
     if bad:
         print(f"结果：{bad} 份有问题 —— **不要提交**")
