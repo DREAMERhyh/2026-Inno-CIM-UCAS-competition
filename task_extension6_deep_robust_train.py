@@ -78,8 +78,15 @@ def get_model(model_name: str, num_classes: int = 10) -> nn.Module:
     elif model_name == "resnet18":
         from models.robust_resnet import RobustResNet18
         return RobustResNet18(num_classes=num_classes)
+    elif model_name == "wide_cnn":
+        # M5 的第 4 个容量档（2026-09-26）：SimpleCNN 的加宽版 V2，
+        # MACs 133.3M（0.87× VGG-11）、参数量 1.40M。
+        # use_calibration=True 必须与 :626 的硬编码元数据一致，否则 metrics.json
+        # 里的开关与实际结构不符（静默不一致）。
+        from models.simple_cnn_wide import SimpleCNNWideV2
+        return SimpleCNNWideV2(num_classes=num_classes, use_calibration=True)
     else:
-        raise ValueError(f"不支持的模型名称: '{model_name}'，当前支持 vgg11, resnet18")
+        raise ValueError(f"不支持的模型名称: '{model_name}'，当前支持 vgg11, resnet18, wide_cnn")
 
 
 def get_depth_group(model_name: str, module_name: str) -> str:
@@ -121,6 +128,22 @@ def get_depth_group(model_name: str, module_name: str) -> str:
             return "middle"
         if module_name.startswith("layer4."):
             return "deep"
+        return "middle"
+
+    elif model_name == "wide_cnn":
+        # 层名与 SimpleCNN 同构（conv1..conv4 / fc，见 models/simple_cnn_wide.py），
+        # 沿用 SimpleCNN Exp2 的分组语义：
+        #   conv1/conv2 → shallow [-0.15,0.15]；conv3/conv4 → middle [-0.30,0.30]；
+        #   fc → 固定 ±0.3；calibration.net.* → middle（由函数开头的 calibration 判断兜住）
+        # 🔴 不写这个分支 ⇒ 全部落进末尾的 "middle" ⇒ conv1/conv2 的 α 范围从
+        #    [-0.15,0.15] 变成 [-0.30,0.30]、fc 从"固定 ±0.3"变成均匀采样。
+        #    **不报错、照跑、只是协议变了** —— 本项目最怕的静默失效。
+        if module_name in ("conv1", "conv2"):
+            return "shallow"
+        if module_name in ("conv3", "conv4"):
+            return "middle"
+        if module_name == "fc":
+            return "fc"
         return "middle"
 
     return "middle"
@@ -519,8 +542,8 @@ def parse_args():
     )
     parser.add_argument(
         "--model", type=str, required=True,
-        choices=["vgg11", "resnet18"],
-        help="训练模型：vgg11 或 resnet18",
+        choices=["vgg11", "resnet18", "wide_cnn"],
+        help="训练模型：vgg11、resnet18 或 wide_cnn",
     )
     parser.add_argument("--epochs", type=int, default=120, help="训练 epoch 数，默认 120（与 Exp2 一致）")
     parser.add_argument(

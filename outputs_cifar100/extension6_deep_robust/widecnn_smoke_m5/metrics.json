@@ -1,0 +1,16 @@
+{
+    "dataset": "cifar100",
+    "best_test_acc": 17.46,
+    "best_epoch": 1,
+    "total_epochs": 1,
+    "final_train_loss": 3.8154022987072285,
+    "final_test_loss": 3.466326880645752,
+    "final_train_acc": 12.137419871794872,
+    "final_test_acc": 17.46,
+    "final_alpha03_acc": 2.14,
+    "use_calibration": true,
+    "layerwise_alpha": true,
+    "asymmetric_sampling": false,
+    "exp_name": "Exp2_Calib+Layerwise",
+    "model_name": "wide_cnn"
+}

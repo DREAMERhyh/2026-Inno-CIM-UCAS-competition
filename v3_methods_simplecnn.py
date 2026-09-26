@@ -163,10 +163,19 @@ class SimpleCNNMaxPoolVariant(SimpleCNNMaxPool):
         self.pool_type = pool_type
 
 
-def build_arch(name, nc):
+def build_arch(name, nc, act="relu"):
     if name == "vgg11":                       # 第六阶段 P4c：跨架构粒度对照用
         from models.vgg11 import VGG11
         return VGG11(num_classes=nc)
+    if act != "relu":
+        # M14b：激活参数化变体（models/simple_cnn_act.py，镜像实现）。
+        # 参数命名与参数量与 ReLU 版逐字一致；act="relu" 不走这条路径 ⇒ 既有行为逐字不变。
+        from models.simple_cnn_act import SimpleCNNAct, SimpleCNNMaxPoolAct
+        if name == "simple_cnn_mp":
+            return SimpleCNNMaxPoolAct(num_classes=nc, act=act)
+        if name == "simple_cnn":
+            return SimpleCNNAct(num_classes=nc, act=act)
+        raise ValueError(f"--act={act} 只支持 simple_cnn / simple_cnn_mp，不支持 {name}")
     if name == "simple_cnn_mp":
         return SimpleCNNMaxPool(num_classes=nc)
     if name == "simple_cnn_mp_avg":
@@ -441,6 +450,9 @@ def main():
     ap.add_argument("--alpha-consume", type=int, default=5, choices=[1, 5],
                     help="每 batch 消耗的随机数个数（第六阶段 P4f）。5=现状（逐层各抽一个）；"
                          "1=只抽一个并广播全层。默认 5，改造前行为逐字不变。")
+    ap.add_argument("--act", default="relu", choices=["relu", "gelu", "leaky"],
+                    help="M14b：激活函数。默认 relu = 既有行为逐字不变；"
+                         "gelu/leaky 走 models/simple_cnn_act.py 的镜像实现")
     ap.add_argument("--tag", default="")
     ap.add_argument("--num_workers", type=int, default=0,
                     help="DataLoader 工作进程数（内存受限时保持 0）")
@@ -450,12 +462,14 @@ def main():
     device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
 
     nc = get_num_classes(args.dataset)
-    model = build_arch(args.arch, nc).to(device)
+    model = build_arch(args.arch, nc, args.act).to(device)
     names = layer_names(model)
 
     name = f"{args.mode}_{args.profile}{args.tag}"
     if args.arch != "simple_cnn":
         name = f"{args.arch}_{name}"
+    if args.act != "relu":
+        name = f"{name}_{args.act}"          # M14b：防覆盖既有 ReLU 产物
     if args.mode == "range":
         name = f"range_{args.alpha_max:.2f}{args.tag}"
     args.ckpt_dir = os.path.join(get_ckpt_root(args.dataset), f"v3_{name}")

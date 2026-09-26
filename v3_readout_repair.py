@@ -68,6 +68,12 @@ def build_backbone(name, nc):
         # MaxPool 密集变体（定义在 v3_methods_simplecnn.py，P1-5 引入）
         from v3_methods_simplecnn import SimpleCNNMaxPool
         return SimpleCNNMaxPool(num_classes=nc)
+    if name == "robust_wide_cnn":
+        # M5 的第 4 个容量档（2026-09-26）。
+        # ⚠ 这一条同时服务两个脚本：v5_probe_rank_collapse.py 从本模块 import
+        #   build_backbone（第 99~100 行），所以只改这里，秩探针自动支持。
+        from models.simple_cnn_wide import SimpleCNNWideV2
+        return SimpleCNNWideV2(num_classes=nc, use_calibration=True)
     raise ValueError(f"未支持的主干: {name}")
 
 
@@ -216,7 +222,8 @@ def main():
                     help="clean 权重时的模型名（兼容旧接口，等价于 --arch）")
     ap.add_argument("--arch", default=None,
                     choices=["simple_cnn", "vgg11", "resnet18", "simple_cnn_mp",
-                             "robust_vgg11", "robust_resnet18", "robust_cnn"],
+                             "robust_vgg11", "robust_resnet18", "robust_cnn",
+                             "robust_wide_cnn"],
                     help="主干架构类（默认 = --model）")
     ap.add_argument("--ckpt", default=None, help="主干权重路径（默认 = clean 权重）")
     ap.add_argument("--backbone_tag", default="", help="主干标签（用于命名/记录）")

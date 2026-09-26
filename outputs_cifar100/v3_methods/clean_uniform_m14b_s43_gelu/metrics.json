@@ -1,0 +1,65 @@
+{
+    "dataset": "cifar100",
+    "mode": "clean",
+    "profile": "uniform",
+    "best_test_acc": 60.88,
+    "best_epoch": 108,
+    "total_epochs": 120,
+    "final_alpha03_acc": 26.46,
+    "seed": 43,
+    "elapsed_sec": 1894.1,
+    "alpha_scan": {
+        "-0.3": 46.53,
+        "-0.2": 52.76,
+        "-0.1": 57.88,
+        "0.0": 60.88,
+        "0.1": 58.27,
+        "0.2": 47.14,
+        "0.3": 26.25
+    },
+    "gaussian_scan": {
+        "0.05": 55.15,
+        "0.1": 36.65,
+        "0.15": 21.15,
+        "0.2": 12.7,
+        "0.25": 7.8,
+        "0.3": 5.26
+    },
+    "history_tail": [
+        {
+            "epoch": 116,
+            "train_loss": 0.9265117593300648,
+            "clean_acc": 60.71,
+            "alpha03_acc": 27.34
+        },
+        {
+            "epoch": 117,
+            "train_loss": 0.9259290481225039,
+            "clean_acc": 60.4,
+            "alpha03_acc": 26.95
+        },
+        {
+            "epoch": 118,
+            "train_loss": 0.9255291463472904,
+            "clean_acc": 60.81,
+            "alpha03_acc": 26.79
+        },
+        {
+            "epoch": 119,
+            "train_loss": 0.9272374795033381,
+            "clean_acc": 60.72,
+            "alpha03_acc": 26.07
+        },
+        {
+            "epoch": 120,
+            "train_loss": 0.9278430396165603,
+            "clean_acc": 60.6,
+            "alpha03_acc": 26.46
+        }
+    ],
+    "config": {
+        "adv_steps": 2,
+        "adv_lr": 0.1,
+        "lr": 0.01
+    }
+}

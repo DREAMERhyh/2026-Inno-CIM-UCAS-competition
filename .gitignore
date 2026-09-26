@@ -226,3 +226,9 @@ __marimo__/
 .streamlit/secrets.toml
 *.log
 logs_cifar100/
+
+# 训练脚本的 stderr 转储（`python ... 2>logs_x.err`）。
+# 内容**几乎全是 tqdm 进度条**（\r 分隔、无换行），零信息量，
+# 单个 18 MB（M4 重启那两个）。真正的日志在 *.log 里。
+# 2026-09-26 加：它们此前一直挂在未跟踪区，让 git status 永远不干净。
+*.err
