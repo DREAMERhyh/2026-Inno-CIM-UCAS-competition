@@ -211,7 +211,8 @@ SHOT 处理\textbf{不访问源数据}的域适应，它\textbf{冻结源模型�
 「冻结主干、只重训最后的线性层」（linear probing）与全量微调的对比，
 在迁移学习里是一条有理论与大规模实证支撑的已知结论：
 当预训练特征足够好、且分布偏移足够大时，\textbf{线性探针的分布外精度反而高于全量微调}
-（在 10 个偏移数据集上平均，\textbf{全量微调相对线性探针 ID 高 2\%、OOD 低 7\%}），原因是微调在学头的同时
+（在 10 个偏移数据集上平均，\textbf{全量微调相对线性探针 ID 高 2\%、OOD 低 7\%}；注意这是 FT 对 LP 的比较，
+与本文另一处引用的"LP-FT 对 FT"是两回事），原因是微调在学头的同时
 \textbf{扭曲了底层特征}（feature distortion）~\cite{lpft}。
 本文的读出适配属于同一族做法。\textbf{本文的贡献不在于此规律本身}，而在于：
 ① 把它搬到一个新场景——失真是确定性的、逐层累积的输入侧系统误差，
@@ -292,7 +293,11 @@ ResNet-18 & 11\,173\,962 / 11\,220\,132 & 17 & 0 \\
 \vspace{2pt}
 {\footnotesize $^\dagger$ 仅用于 \cref{fig:rankrec} 的第 4 个容量档，不参与正文其余各节。
 与 SimpleCNN 的差异有\textbf{两个变量}：容量（1.40M 对 0.25M）与\textbf{第二次下采样位置}
-（SimpleCNN 的 conv4 在 $16\times16$、本主干在 $8\times8$），后者是 MACs 约束下的取舍。}
+（SimpleCNN 的 conv4 在 $16\times16$、本主干在 $8\times8$），后者是 MACs 约束下的取舍。\par
+\textbf{参数量口径}：本表为\textbf{主干本体}，\textbf{不含}各实验所用配方里的
+\textbf{特征校准模块}（\texttt{FeatureCalibration}）。\textbf{含}校准模块时，
+VGG-11 与 ResNet-18 分别为 $9\,889\,796$（$9.89$\,M）与 $11\,919\,332$（$11.92$\,M），
+第 4 个容量档为 $1\,662\,340$（$1.66$\,M）——复现者按模型定义实例化得到的是后者。}
 \end{table}
 
 \textbf{失真注入}：逐层、逐样本，同一个 $\alpha$ 施加到所有层（除非特别说明）。
@@ -396,7 +401,7 @@ $\alpha=+0.3$ 时两者相差 20.26 个百分点；该差距随失真增强先�
 \label{fig:probe}
 \end{figure}
 
-$\alpha=+0.3$ 时探针达 48.35\%，自带头只有 28.09\%，headroom 为 \textbf{20.26} 个百分点%
+$\alpha=+0.3$ 时探针达 48.35\%，自带头只有 28.09\%，headroom 为 \textbf{20.26} 个百分点
 \footnote{两项均取自\textbf{全量测试集}（10\,000 张），并与项目的规范口径逐位一致：
 冻结头在 $\alpha=+0.3$ 的 28.09 等于 \texttt{task1} 扫描的同名行，
 清洁模型在 $\alpha=0$ 的 59.99 等于 \texttt{metrics.json} 的 \texttt{best\_test\_acc}。
@@ -760,13 +765,22 @@ $\alpha=+0.5$ 反转为 $-10.77$；负侧在外推区保持正值并略有上升
 （fine-tuning, FT）——即 Kumar 等提出的 LP-FT 配方~\cite{lpft}。
 它的要点是\textbf{先把头训好再解冻}：直接全量微调时，随机初始化的头会在早期产生大梯度、
 把预训练特征扭曲掉，先做 LP 可以避免这一点。该配方在分布偏移场景下比全量微调好约 10 个百分点
-（\textbf{ID 高 1\% / OOD 高 10\%}，见第 \ref{sec:related} 节）。
+（\textbf{ID 高 1\% / OOD 高 10\%}，同一文献~\cite{lpft}——
+\textbf{注意这是"LP-FT 对全量微调"}，与第 \ref{sec:related} 节那组
+"全量微调对线性探针"（2\%/7\%）\textbf{不是同一个对照}，两组数不可混）。
 ⇒ \textbf{若它在失真场景下同样成立，"训练端无效"这一说法就必须加上限定}。
 
 判据在跑前写死：\textbf{LP-FT 在 $\alpha=+0.3$ 上相对同一次运行内的纯读出适配提升
 $\ge3$\,pp}（本项目自订的种子噪声分辨门槛）即算成立。
 \cref{tab:lpft} 给出结果：\textbf{三个主干一致大幅下降}——
 不是"没有提升"，而是\textbf{净损伤}，最深的主干上掉了 33.83 个百分点。
+
+\textbf{口径提醒（必读）}：\cref{tab:lpft} 的"纯读出"列取自\textbf{同一次运行的 LP 臂}（\textbf{单 seed}），
+与 \cref{tab:nat} 第二行的"读出适配"（\textbf{3 seed 均值}）\textbf{同名但不同源、不可互替}。
+ResNet-18 那一格 20.79 对 26.82 的 6.03 个百分点里，
+\textbf{约 4.6 来自"单 seed 对 3 seed 均值"}（该主干读出侧的种子标准差本就是 3.40），
+\textbf{约 1.5 来自脚本内的 RNG 路径差}（LP 阶段 \texttt{nn.Linear} 的初始化走全局 torch RNG，
+与既有产物不同）。\textbf{本表的判据是同一次运行内的前后对比，不受此影响。}
 
 \begin{table}[t]
 \centering
@@ -787,6 +801,9 @@ ResNet-18（Exp3）& 20.79 &  7.91 & \textbf{$-12.88$} \\
 \vspace{2pt}
 {\footnotesize 两臂在同一次运行内、同一评估路径下测量（读出侧 seed 42）；
 LP 阶段 24\,ep、lr $10^{-2}$，FT 阶段 30\,ep、lr $10^{-3}$。
+\textbf{FT 的 batch 在 ResNet-18 一臂为 128、另两臂为 512}——
+512 是为"冻结主干前向 / 从头训练"选的，做\textbf{全模型反传}时该主干实测 $>13$\,min/epoch，
+故改小。这是\textbf{修配置}（lr 与 ep 保持预登记值），但读者应知道\textbf{这一格与另两格不同源}。
 数据：\path{outputs_cifar100/v7_m8c_lpft/}。}
 \end{table}
 
@@ -861,7 +878,7 @@ $\text{Fisher}(+\alpha)>\text{Fisher}(-\alpha)$ 在 $|\alpha|\in\{0.1,\dots,0.5\
 信息仍存在于剩余的维度里，但这些维度在主干参数的可达域之外；
 只有换一个读出才能在新的几何下重新找到判别方向。
 
-\subsection{读出能拿回多少，主要由表征的秩损失决定——但它不是唯一因素}
+\subsection{读出能拿回多少与秩损失强相关——但它不是唯一因素}
 
 如果上一节的机制成立，那么"秩掉得越多，读出能拿回的越少"应当成立。
 \cref{fig:rankrec} 把四个容量档的秩损失与各自的读出恢复率配对。
@@ -880,7 +897,7 @@ $\text{Fisher}(+\alpha)>\text{Fisher}(-\alpha)$ 在 $|\alpha|\in\{0.1,\dots,0.5\
 
 秩损失 19.9\% / 20.6\% / 33.3\% / 58.7\% 对应恢复率
 68.2\% / 72.2\% / 70.2\% / 36.9\%（$r=-0.934$），\textbf{整体趋势成立}。
-但反向不成立：ResNet-18 掉了 58.7\% 的秩，读出仍拿回 36.9\%
+但\textbf{"秩塌陷即不可恢复"}不成立：ResNet-18 掉了 58.7\% 的秩，读出仍拿回 36.9\%
 （相对自带头 6.22 仍有 $+20.60$），所以\textbf{塌陷不等于不可恢复}。
 
 第 4 个容量档（Wide-CNN：1.40M 参数，MACs 为 VGG-11 的 0.87 倍）的干净精度 65.97\%
@@ -927,8 +944,10 @@ $\text{Fisher}(+\alpha)>\text{Fisher}(-\alpha)$ 在 $|\alpha|\in\{0.1,\dots,0.5\
 均值 \textbf{40.29 $\pm$ 1.58}，即在该臂内部增益应记为 $+12.20$（基线仍为异协议的单次运行）。
 \textbf{42.47 是这三个种子里最高的一个}，不宜单独引用。
 
-七点均值提升 3.6$\sim$4.9 个百分点（干净臂用 3 seed 均值 52.88 对基线 49.29；
-同协议配对的 NAT 臂为 54.09 对 49.24），而干净精度不降。增益与读出适配同级，但训练成本为零。
+七点均值提升 \textbf{3.6$\sim$4.9} 个百分点——
+\textbf{区间两端是两种口径，不可当成同一个量}：下界 $3.6$ 取自干净臂的 \textbf{3 seed 均值}
+（$52.88$ 对基线 $49.29$）；上界 $4.9$ 取自同协议配对的 NAT 臂（$54.09$ 对 $49.24$），
+为\textbf{单 seed}。而干净精度不降。增益与读出适配同级，但训练成本为零。
 
 \textbf{保护从哪里来？} 四个候选机制被逐一检验：三条被否证，一条判为不可分辨。
 
@@ -1061,7 +1080,7 @@ ResNet-18（Exp3 主干）$R^2=\textbf{0.9778}$ / MAE 0.0219。
 为检验它，在\textbf{尚无任何配方结果}的 CIFAR-10 上锁定了全部超参、
 并在跑之前写死了五条判据（C1--C5）。
 结果：形式判据成立，但强主张\textbf{未复现}——
-"插值超过 oracle"的判据由 3/7 降到 \textbf{1/7}%
+"插值超过 oracle"的判据由 3/7 降到 \textbf{1/7}
 \footnote{\textbf{但这个计数不稳健，本节的结论不挂在它上面。}
 内部复核发现：CIFAR-10 侧有一个 $\alpha$ 点的"软门控减 oracle"只有 $-0.0100$ pp
 （$\alpha=-0.2$），而 CPU 与 CUDA 的\textbf{设备差异单独就能把它翻成 $+0.0033$}
@@ -1716,6 +1735,7 @@ Dithering 增益（C100 / C10） & $+2.84$ / $+6.53$ & \path{extension5_ditherin
 \end{tabular}
 \end{table}
 
+\clearpage   % 把附录 A 的表冲刷到本页，否则它会飘到后面的参考文献页里（2026-09-26 体检 M-3）
 \section{低位量化机理的跨数据集平行对照}
 \label{app:dither-c100}
 
@@ -1768,6 +1788,7 @@ SimpleCNN（2 MaxPool） & --- & $-13.68$ & $-14.71$ \\
 而\textbf{幅度不可跨数据集搬运}——同一条"3 bit 比 4 bit 更尖"，在 CIFAR-10 上只是 $0.30$ 个点的代价，
 在 CIFAR-100 上却是 $8.88$ 个点。
 
+\clearpage   % 同上：不冲刷的话附录 B 的表会夹在参考文献 [4] 与 [5] 之间（2026-09-26 体检 M-3）
 \begin{thebibliography}{99}
 \bibitem{cim_survey} Yu S, Chen P Y. Emerging memory technologies: recent trends and prospects[J]. IEEE Solid-State Circuits Magazine, 2016, 8(2): 43--56.
 \bibitem{puma} Ankit A, El Hajj I, Chalamalasetti S R, et al. PUMA: a programmable ultra-efficient memristor-based accelerator for machine learning inference[C]//ASPLOS. Providence: ACM, 2019: 715--731.

@@ -204,7 +204,11 @@ ResNet-18 & 11\,173\,962 / 11\,220\,132 & 17 & 0 & 有 & 残差变量 \\
 \vspace{2pt}
 {\footnotesize $^\dagger$ 与 SimpleCNN 的差异有\textbf{两个变量}：容量（1.40M 对 0.25M）
 与\textbf{第二次下采样位置}（SimpleCNN 的 conv4 在 $16\times16$、本主干在 $8\times8$），
-后者是 MACs 约束下的取舍。}
+后者是 MACs 约束下的取舍。\par
+\textbf{参数量口径}：本表为\textbf{主干本体}，\textbf{不含}各实验配方里的
+\textbf{特征校准模块}（\texttt{FeatureCalibration}）。\textbf{含}校准模块时，
+VGG-11 与 ResNet-18 分别为 $9\,889\,796$（$9.89$\,M）与 $11\,919\,332$（$11.92$\,M），
+第 4 个容量档为 $1\,662\,340$（$1.66$\,M）——复现者按模型定义实例化得到的是后者。}
 \end{table}
 
 产物目录按数据集分离：\texttt{outputs/}（CIFAR-10）与 \texttt{outputs\_cifar100/}（CIFAR-100）；
@@ -235,7 +239,8 @@ ResNet-18 & 11\,173\,962 / 11\,220\,132 & 17 & 0 & 有 & 残差变量 \\
 \subsection{第一、二阶段：任务层结果与三项优化（CIFAR-10）}
 
 前两阶段以 CIFAR-10 为主线，对应赛题的三项任务与三项拓展，
-以及评审意见带来的三项优化。它们的完整数值见竞赛版文档，此处给出归档要点。
+以及评审意见带来的三项优化。它们的完整数值见竞赛版文档，此处给出归档要点；
+这一阶段的四张主图是 \cref{fig:c01}、\cref{fig:c04}、\cref{fig:c06} 与 \cref{fig:c07}。
 
 \begin{quote}
 \small\textbf{口径注（实现归属）}：本节以及第 \ref{sec:history} 节引用的\textbf{第一、二阶段数值}
@@ -383,6 +388,8 @@ ResNet-18 全程无败；$\alpha=+0.3$ 的增益为 $+13.55$ / $+3.04$；
 
 \subsection{失真有多大破坏力，往哪里累积}
 
+\cref{fig:direction} 给出失真的方向性与容量依赖。
+
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.70\textwidth]{F01_direction.pdf}
@@ -425,7 +432,7 @@ $\alpha=+0.3$ 时相差 20.26 个百分点；同样的探针在加性高斯噪�
 \label{fig:probe}
 \end{figure}
 
-$\alpha=+0.3$ 时探针达 48.35\%、原始头 28.09\%，headroom \textbf{20.26}%
+$\alpha=+0.3$ 时探针达 48.35\%、原始头 28.09\%，headroom \textbf{20.26} 个百分点
 \footnote{两项均取自\textbf{全量测试集}（10\,000 张），与项目的规范口径逐位一致
 （$\alpha=+0.3$ 的 28.09 等于 \texttt{task1} 同名行；$\alpha=0$ 的 59.99 等于 \texttt{metrics.json}
 的 \texttt{best\_test\_acc}）。早期版本曾用 8000 样本子集，给出 27.76 / 59.60 与 $+20.12$；
@@ -445,7 +452,81 @@ $\alpha=+0.3$ 上只有 18.1，低于原始头（28.09）。
 \textbf{对照通路的判别力}：同一套探针在加性高斯噪声 $\sigma=0.3$ 下 headroom 只有 7.50。
 随机扰动与确定性系统误差在"信息还剩多少"这个量上清楚地分开。
 
+\subsection{这条探针读数可信吗：一次主动加固}
+
+上面那个 headroom 是\textbf{单点}探针读数，而线性探针近年正受到系统质疑：
+\textbf{探针精度饱和并不意味着信息在场，探针失灵也不意味着信息不在场}。
+已有工作报告过\textbf{探针精度 0.871、有效秩 18$\sim$47 全部健康}的表征，
+在检索任务上却只恢复了 14.4 bit 中的 \textbf{0.00} bit~\cite{gjepa}。
+本报告因此做了一组主动加固，四路对照如下。
+
+\paragraph{对照一：随机标签。}
+把探针的训练标签打乱后重训。9 个条件全部落在 $[0.85,1.11]\%$，
+而 CIFAR-100 的随机水平是 $1.0\%$，\textbf{最大偏离 0.15 个百分点}。
+⇒ 探针管线没有泄漏。
+
+\paragraph{对照二：fragility（激活噪声下的临界崩塌点）。}
+单点精度之外再取一个读数：给评估侧的激活加噪，测"探针精度跌到半程时的噪声水平" $\sigma^*$。
+该指标及其用法取自已有工作~\cite{fragility}——它报告的正是"探针精度持平时，
+fragility 仍能给出结构化回答"，本文借用它作第二条独立读数。
+（噪声只加在\textbf{评估}侧——训练侧也加噪测的是解码器的抗噪补偿能力，是另一个量。）
+结果：正侧 $\sigma^*$ 从 clean 的 \textbf{0.4188} 一路降到 $\alpha=+0.5$ 的 \textbf{0.1221}（$-71\%$；
+只有 $\alpha=+0.1$ 一点略高于 clean，0.4273，此后严格单调下降）。
+\textbf{但在同一 $|\alpha|=0.3$ 上，正负两侧几乎一样}：$\sigma^*$ 为 \textbf{0.3230} 与 \textbf{0.3310}，
+相对 clean 分别是 $\mathbf{-22.9\%}$ 与 $\mathbf{-21.0\%}$（约 $1.1:1$）。
+（负侧只测到 $-0.3$——产物里没有 $\alpha=-0.4/-0.5$ 两档，
+所以"负侧平缓"是\textbf{未测}，不是测出来。）
+⇒ \textbf{第二条读数在最关心的那一点上没有复现 headroom 的不对称}：
+同一 $|\alpha|=0.3$ 处，headroom 是 $20.26$ 对 $4.76$（$4.3:1$），而 fragility 只有 $1.1:1$。
+两条读数\textbf{一致的地方只有"失真使读出更脆"这个方向}；
+\textbf{"正侧特别脆"这件事对指标敏感}——这是本文对这条加固论证的\textbf{限定}，
+要判定 fragility 在大失真处是否也分正负，须把负侧测到 $-0.5$。
+
+\paragraph{一个必须避开的陷阱（我们在本项目内实测到了它）。}
+$\sigma^*$ 的\textbf{单位}是关键：若用\textbf{绝对}噪声水平，会得出\textbf{符号相反}的结论：
+
+\begin{center}
+\small
+\begin{tabular}{lccc}
+\toprule
+$\alpha$ & 激活 RMS & 绝对 $\sigma^*$ vs clean & \textbf{RMS 归一} $\sigma^*$ vs clean \\
+\midrule
+clean & 2.166 & --- & --- \\
+$-0.3$ & \textbf{4.055}（$1.87\times$） & $+48\%$（\textbf{显得更鲁棒}） & $-21\%$（\textbf{更脆弱}） \\
+$+0.3$ & 0.914（$0.42\times$） & $-67\%$（更脆弱） & $-23\%$（更脆弱） \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent 原因：$\alpha<0$ 把深层激活的幅度\textbf{抬高到 1.87 倍}，固定绝对噪声相对就更"小"，
+于是失真组\textbf{虚假地显得更鲁棒}。归一化到该条件自身的 RMS 之后符号才正确。
+⇒ \textbf{负侧的结论完全依赖这一步归一化}。
+\textbf{这一陷阱并非本文首见}：\cite{fragility} 自己就把它列为该指标的适用条件
+（跨层比较须用 RMS 归一化的临界噪声，层内比较才用原始值），
+本文在本场景下\textbf{独立复现}了它——而且这里尺度差达 $1.87\times$，
+所以这一步在本文里是\textbf{判决性的}，不是可选项。
+（出处：\path{v7_probe_audit/c2_fragility.csv} 的 \path{critical_noise_abs}
+与 \path{critical_sigma_rms_norm} 两列，"vs clean"以该文件的 clean 行为基准。）
+
+\paragraph{对照三与四：划分与不相交性。}
+换 decoder 的随机种子与训练/测试划分（5 个划分 $+$ 3 次 bootstrap）：读数稳定，
+划分间标准差 $0.17\sim0.47$、bootstrap $\le0.38$，单条件总标准差 $0.56\sim1.33$（总极差 $\le3.42$）。
+更强的一项是把探针的训练与评估都放在\textbf{与主干训练集完全不相交}的样本上：
+$\alpha=+0.3$ 的 headroom 为 $\bm{+16.23}$，即规范口径 $+20.26$ 的 \textbf{80\%}。
+
+\paragraph{小结。}
+四路对照\textbf{都未能否证} headroom；其中\textbf{只有对照二（fragility）提供了第二条独立读数}，
+而它只与 headroom 在"方向"上一致（见上）。
+\textbf{headroom 这个结论在更严的口径下存活，但幅度会缩水到约八成}。
+我们把它作为中心结论的\textbf{下界}：即使在"探针从没见过的样本上训练"这一最严设定下，
+$\alpha=+0.3$ 处仍有一个约 16 个百分点的可解码性缺口。
+（出处：\path{outputs_cifar100/v7_probe_audit/} 下的
+\path{c1_random_label.csv}、\path{c2_fragility.csv}、\path{c3_decoder_split.csv}、
+\path{c4_private_split.csv} 与 \path{c5_private_decompose_agg.csv}。）
+
 \subsection{修复：冻结主干、只重训线性读出}
+
+\cref{fig:readoutnat} 给出读出适配在三个主干上的逐点读数。
 
 \begin{figure}[t]
 \centering
@@ -511,6 +592,8 @@ VGG-11 $46.82\pm0.25$、ResNet-18 $22.91\pm2.61$——
 
 \subsection{训练端的五条路径为什么都没能改善尾部}
 
+前四条路径的读数见 \cref{fig:training}（第五条 LP-FT 见下文 \cref{tab:lpft}）。
+
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.68\textwidth]{F04_training_paths.pdf}
@@ -554,8 +637,17 @@ ResNet-18（Exp3）& 20.79 &  7.91 & \textbf{$-12.88$} \\
 
 \vspace{2pt}
 {\footnotesize 两臂在同一次运行内、同一评估路径下测量；读出侧 seed 42。
-LP 24\,ep / lr $10^{-2}$，FT 30\,ep / lr $10^{-3}$。数据：\path{outputs_cifar100/v7_m8c_lpft/}。}
+LP 24\,ep / lr $10^{-2}$，FT 30\,ep / lr $10^{-3}$。
+\textbf{FT 的 batch 在 ResNet-18 一臂为 128、另两臂为 512}——
+512 是为"冻结主干前向 / 从头训练"选的，做\textbf{全模型反传}时该主干实测 $>13$\,min/epoch，故改小；
+这是\textbf{修配置}（lr 与 ep 保持预登记值），但读者应知道\textbf{这一格与另两格不同源}。
+数据：\path{outputs_cifar100/v7_m8c_lpft/}。}
 \end{table}
+
+\textbf{口径提醒（必读）}：\cref{tab:lpft} 的"纯读出"列取自\textbf{同一次运行的 LP 臂}（\textbf{单 seed}），
+与 \cref{tab:nat} 的"读出适配"（\textbf{3 seed 均值}）\textbf{同名但不同源、不可互替}。
+ResNet-18 那一格 20.79 对 26.82 的 6.03 个百分点里，约 4.6 来自"单 seed 对 3 seed 均值"、
+约 1.5 来自脚本内的 RNG 路径差。\textbf{本表的判据是同一次运行内的前后对比，不受此影响。}
 
 \textbf{机制比数字更有信息量}：FT 阶段\textbf{训练精度一路上涨}
 （SimpleCNN 88.9\%、VGG-11 96.9\%，在混合 $\alpha$ 的训练分布上），
@@ -567,6 +659,8 @@ LP 24\,ep / lr $10^{-2}$，FT 30\,ep / lr $10^{-3}$。数据：\path{outputs_cif
 同时把前四条的"无效"升级为"动到主干会主动变坏"。
 
 \subsection{损伤的形态：维度丢失，不是类间距缩小}
+
+\cref{fig:rank} 给出有效秩的塌陷形态，\cref{fig:rankrec} 把秩损失与可恢复量配对。
 
 \begin{figure}[t]
 \centering
@@ -600,13 +694,14 @@ $\alpha=+0.3$ 时有效秩下降 20.6\% / 33.3\% / 58.7\%（三个主干）；
 \caption{秩损失与读出可恢复量（四点，$r=-0.934$）。
 恢复率 = 读出适配 @$\alpha=+0.3$ 的精度 $\div$ 同一文件里原始头 @$\alpha=0$ 的精度。
 四点\textbf{已不是单调关系}：最左两点秩损失只差 0.7 个百分点，恢复率却差 4.0 个百分点。
-\textbf{四点仍不足以定曲线形状}；形状提示为"先平后塌"。}
+\textbf{四点仍不足以定曲线形状}；形状提示为"先平后塌"。
+数据：\texttt{rank\_stats*.csv} 与 \texttt{v3\_readout\_repair/*ep24*.csv}。}
 \label{fig:rankrec}
 \end{figure}
 
 秩损失 19.9\% / 20.6\% / 33.3\% / 58.7\% 对应恢复率
 68.2\% / 72.2\% / 70.2\% / 36.9\%（$r=-0.934$），\textbf{整体趋势成立}；
-反向不成立——ResNet-18 掉了 58.7\% 的秩，读出仍拿回 36.9\%。
+\textbf{"秩塌陷即不可恢复"}不成立——ResNet-18 掉了 58.7\% 的秩，读出仍拿回 36.9\%。
 
 第 4 个容量档（Wide-CNN：1.40M 参数，MACs 为 VGG-11 的 0.87 倍）的干净精度 65.97\%
 正好落在 SimpleCNN（59.99）与 VGG-11（68.05）之间，
@@ -622,21 +717,30 @@ $\alpha=+0.3$ 时有效秩下降 20.6\% / 33.3\% / 58.7\%（三个主干）；
 
 \subsection{第二个杠杆：池化密度}
 
+\cref{fig:maxpool} 给出这个零训练成本的杠杆。
+
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.68\textwidth]{F07_maxpool_density.pdf}
 \caption{池化密度是零训练成本的独立架构杠杆。
-MaxPool 从 2 个加到 5 个（参数量不变、训练脚本不变）：
+MaxPool 从 2 个加到 5 个（参数量不变）：
 $\alpha=+0.3$ 从 28.09 到 42.47。虚线为\textbf{第一阶段脚本}的产物：
 它与实线出自\textbf{不同训练脚本}（本项目实测跨脚本的精度数字不可直接比较），
-故属异协议、仅作锚点，不与实线并列比较。}
+故属异协议、仅作锚点，不与实线并列比较。
+\textbf{注意：$28.09\to42.47$ 这一对数是横跨这两条曲线的，引用它须注明其跨协议性}；
+同协议同 seed 配对的读数是 $26.03\to41.55$（$+15.52$），应优先引用后者。
+数据：\texttt{outputs\_cifar100/v3\_methods/simple\_cnn\_mp\_clean\_uniform/alpha\_sensitivity.csv}
+与 \texttt{task1\_simplecnn/alpha\_sensitivity.csv}。}
 \label{fig:maxpool}
 \end{figure}
 
 5 个 MaxPool 的那一支以下简称\textbf{mp 主干}（表 \ref{tab:arch} 的 SimpleCNN+3$\times$MaxPool）。
 $\alpha=+0.3$ 从 28.09 提升到 42.47（干净训练）、26.03 到 41.55（鲁棒训练；
 两侧同为逐层独立采样，同 seed 配对，增益 $+15.52$），
-七点均值提升 4.5$\sim$4.9 个百分点，干净精度不降。
+七点均值提升 \textbf{3.6$\sim$4.9} 个百分点——
+\textbf{区间两端是两种口径，不可当成同一个量}：下界 $3.6$ 取自干净臂的 \textbf{3 seed 均值}
+（$52.88$ 对基线 $49.29$）；上界 $4.9$ 取自同协议配对的 NAT 臂（$54.09$ 对 $49.24$），
+为\textbf{单 seed}。干净精度不降。
 
 \textbf{机制：保护主要来自降维。} 四个候选解释被逐一检验，其中三个被排除、一个判为不可分辨：
 
@@ -696,9 +800,15 @@ max 的选择性 & 换成 top-2 池化（与 $f_\alpha$ 不可交换）
 13 点离散 $\alpha$、3 seed 的 v5 口径给出同样的次可加结论。
 
 失真强度可由读出特征的岭回归在线恢复：四个主干$\times$数据集组合上
-$R^2$ \textbf{0.827$\sim$0.935}、MAE \textbf{0.036$\sim$0.061}。
+$R^2$ \textbf{0.827$\sim$0.978}（\textbf{浅层四个组合 $0.827\sim0.935$、深层两个组合 $0.95\sim0.98$}）、
+MAE \textbf{0.036$\sim$0.061}。
+\textbf{主干越深、估计越准}：VGG-11（Exp2 主干）$R^2=\textbf{0.9516}$ / MAE 0.0324，
+ResNet-18（Exp3 主干）$R^2=\textbf{0.9778}$ / MAE 0.0219
+（出处：\path{v5_full_recipe/recipe_robust_*.csv} 的 \texttt{ridge\_R2} / \texttt{ridge\_MAE} 两列）。
 
 \subsection{门控的边界}
+
+\cref{fig:gating} 给出门控红利与鲁棒头代价的关系。
 
 \begin{figure}[t]
 \centering
@@ -750,6 +860,8 @@ CIFAR-100 上软门控确有若干点超过两个头，那个效应仍然存在�
 该诊断含一条恒等自检：$\text{soft}-\text{oracle}=(\text{rescue}-\text{hurt})\times100$，通过。）
 
 \subsection{失真与量化的联合作用}
+
+\cref{fig:dithering} 给出低位量化的反转。
 
 \begin{figure}[t]
 \centering
@@ -820,6 +932,8 @@ shared 26.55 vs per-layer 26.57，差 $+0.02$（$z=0.08$）；
 \textbf{没查出差异 $\ne$ 没有差异。}
 
 \subsection{第三次：把序列位置误读成消耗数}
+
+\cref{fig:crosspath} 给出这次翻案的证据链。
 
 \textbf{当时的判断}：交叉评估把差异锁到"权重侧"（见下），
 再据 $\alpha$ 采样轨迹把根因定为"随机数流错开"——
@@ -996,11 +1110,12 @@ ETF / 原型读出 & \textbf{无增益}。三种原型或 ETF 正则读出均未
 
 \begin{center}
 \small
-\begin{tabular}{llc}
+\begin{tabular}{llp{6.6cm}}
 \toprule
 层级 & 变的是什么 & 实测幅度 \\
 \midrule
-① 种子噪声 & 同一过程重复 & 尾部 $\pm0.25\sim3.40$；clean $\pm0.07\sim1.85$ \\
+① 种子噪声 & 同一过程重复；\textbf{两类种子须分开} & 尾部：\textbf{读出种子} $\pm0.16\sim3.40$、
+  \textbf{主干种子} $\pm0.25\sim2.61$；clean $\pm0.07\sim1.85$ \\
 \textbf{② 过程自由度} & \textbf{同数据、同特征、同架构，只换拟合过程} & \textbf{3.45 pp} \\
 ③ 跨实现 & 同超参同种子，实现不同 & 5.55 pp（未归因） \\
 \bottomrule
@@ -1418,7 +1533,7 @@ headroom 还有多大、读出杠杆是否成立，\textbf{无法回答}。
         其形态是\textbf{维度丢失}（有效秩下降 20.6\%$\sim$58.7\%）而非类间距缩小。
   \item 架构端的池化密度提供另一条零成本的独立杠杆（同协议同 seed 配对 $+15.52$ 个百分点），
         其保护主要来自降维；两个杠杆在尾部可以同时受益，但\textbf{显著次可加、不独立相加}。
-  \item 失真强度可由岭回归在线恢复（$R^2$ 0.83$\sim$0.94），使门控可以逼近 oracle；
+  \item 失真强度可由岭回归在线恢复（$R^2$ 0.827$\sim$0.978），使门控可以逼近 oracle；
         但门控有效需两个前提同时成立。
   \item 工程上，全部结论只依赖一个硬件条件：\textbf{读出层位于数字域或可重写}。
   \item \textbf{测量纪律上}：本文观测到一个跨训练实现稳定 5.55 个百分点的差异，
@@ -1439,6 +1554,7 @@ headroom 还有多大、读出杠杆是否成立，\textbf{无法回答}。
 \bibitem{tent} Wang D, Shelhamer E, Liu S, et al. Tent: fully test-time adaptation by entropy minimization[C]//International Conference on Learning Representations. 2021. arXiv:2006.10726.
 \bibitem{shot} Liang J, Hu D, Feng J. Do we really need to access the source data? Source hypothesis transfer for unsupervised domain adaptation[C]//International Conference on Machine Learning. 2020: 6028--6039. arXiv:2002.08546.
 \bibitem{gjepa} Rabby G, Auer S. When Graph-JEPA learns the wrong thing: diagnosing and repairing category-conditional collapse[R]. 2026. arXiv:2608.20516.
+\bibitem{fragility} Reblitz-Richardson O. When probing accuracy saturates, fragility resolves: a complementary metric for LLM pre-training analysis[R]. 2026. arXiv:2606.11375.
 \bibitem{mtjcal} Xiao Z, Naik V B, Lim J H, et al. Adapting magnetoresistive memory devices for accurate and on-chip-training-free in-memory computing[J]. Science Advances, 2024, 10(38): eadp3710.
 \end{thebibliography}
 

@@ -58,6 +58,33 @@ def check_source(tex_path):
         if stripped.startswith(">"):
             problems.append(f"    行 {i}: markdown 引用块 `>` —— 会渲染成字面的大于号，"
                             f"应改用 quote 环境")
+        # 裸 %（本该写 \%）。
+        # 三条同时满足才报：① 不在行首（行首 % 是正常注释）② 紧邻前面**没有空白**
+        # （正常注释习惯上会留空格）③ 后面到行尾**只有空白**（说明它不是注释，
+        # 而是一个被静默吃掉的百分号）。
+        # 危害：行尾的 % 会把换行"吃掉"——**不报错、不影响退出码**，
+        # 但若本意是百分号，成品里就少一个 %。
+        # 2026-09-26 外部体检查出 3 处，其中 TR 的 "headroom \textbf{20.26}%"
+        # 成品里只剩 "20.26"（用 -bbox 坐标核过，那个位置没有任何 % 字形）。
+        body = re.sub(r"\\%", "", line)          # 先去掉合法的转义 \%
+        for m in re.finditer(r"%(?=\s*$)", body):
+            head = body[:m.start()]
+            if head and not head[-1].isspace() and not head.lstrip().startswith("%"):
+                problems.append(f"    行 {i}: 裸 `%`（行尾、前面没空格）——"
+                                f"会被 LaTeX 当成注释符；若本意是百分号，成品里会少一个 `%`。"
+                                f"应写 `\\%`")
+                break
+        # \texttt{} 里的**未转义下划线**。
+        # ⚠ 对比记忆：**`\path{}`（url 宏包）天生吃下划线，不用转义**；
+        # 只有 `\texttt{}` 不行——`_` 在 text mode 是数学下标，报 "Missing $ inserted."。
+        # 2026-09-26 自曝：把 `\texttt{ridge\_R2}` 写成 `\texttt{ridge_R2}`，
+        # 触发 **43 个连锁编译错误**（错误位置还会指到别处，像本项目的 `\cref` 那次）。
+        for m in re.finditer(r"\\texttt\{([^}]*)\}", line):
+            if re.search(r"(?<!\\)_", m.group(1)):
+                problems.append(f"    行 {i}: `\\texttt{{}}` 里有未转义的下划线 —— "
+                                f"`_` 在 text mode 会报 `Missing $ inserted.`（且引发连锁错误）。"
+                                f"应写 `\\_`；或用 `\\path{{}}`（它不需要转义）")
+                break
     return problems
 
 
