@@ -13,8 +13,10 @@ archive/paper_competition_rewrite/*.aux
 archive/paper_competition_rewrite/*.out
 archive/paper_competition_rewrite/*.toc
 archive/paper_competition_rewrite/*.synctex.gz
-# 改写工作区里的渲染检查图（只读截图，不是交付物；避免 `git add -A` 带入数 MB PNG）
-rewrite_work/*.png
+# 本地专用（2026-10-20）：项目记忆、会话指令与改写工作区，不进 git
+/.claude/
+/CLAUDE.md
+/rewrite_work/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
