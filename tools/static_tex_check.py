@@ -27,7 +27,7 @@ import re
 import sys
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-PAPERS = ["journal", "technical-report", "competition"]
+PAPERS = ["journal", "technical-report"]
 
 
 # ----------------------------------------------------------------------

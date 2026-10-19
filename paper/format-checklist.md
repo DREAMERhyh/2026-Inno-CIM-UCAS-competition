@@ -32,7 +32,7 @@
 
 | # | 检查项 | 当前状态 | 需要做什么 |
 |---|---|---|---|
-| B1 | 文档类与版式 | 三份均用 `ctexart` + A4 + 2.4cm 页边距 | 若目标载体提供模板（如 LNCS、IEEEtran、中文期刊模板），替换 `\documentclass` 与 `geometry`。**注意：仓库里已有 `Springer_Lecture_Notes_in_Computer_Science/llncs.cls`，若目标是 LNCS 应改用它** |
+| B1 | 文档类与版式 | 两份在编稿均用 `ctexart` + A4 + 2.4cm 页边距 | 若目标载体提供模板（如 LNCS、IEEEtran、中文期刊模板），替换 `\documentclass` 与 `geometry`。**注意：仓库里已有 `paper/templates/springer-lncs/llncs.cls`，若目标是 LNCS 应改用它** |
 | B2 | 页数上限 | 13 / 15 / 18 页 | 查目标载体规定，超限则压缩（优先级：删附录表 $>$ 合并图 $>$ 删讨论小节） |
 | B3 | 摘要字数上限 | 未统计 | 中文期刊常见 200–300 字；**需现查** |
 | B4 | 是否需要英文摘要 | 当前**无** | 按目标载体要求补 `\begin{abstract}` 的英文版 |
@@ -79,5 +79,5 @@ playwright-cli close
 2. **直接定目标期刊** —— 若如此，需先确定刊名，再走 §C 的流程。
 
 **若目标确定为 Springer LNCS**：仓库里已有完整模板
-（`Springer_Lecture_Notes_in_Computer_Science/` 下的 `llncs.cls`、`samplepaper.tex`、`splncs04.bst`），
-可直接把三份稿件的正文迁入。注意 LNCS 是英文模板，中文需另配 `ctex`，属非标准用法。
+（`paper/templates/springer-lncs/` 下的 `llncs.cls`、`samplepaper.tex`、`splncs04.bst`），
+可直接把两份在编稿的正文迁入。注意 LNCS 是英文模板，中文需另配 `ctex`，属非标准用法。

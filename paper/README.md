@@ -5,17 +5,17 @@
 
 ---
 
-## 一、三份稿件
+## 一、稿件（两份在编 + 一份已归档）
 
 | 目录 | 覆盖范围 | 定位 | 页数 | 状态 |
 |---|---|---|---|---|
-| [`competition/`](competition/) | **第一 + 第二阶段**（任务 1–3、拓展 1–3、评审三项优化） | 竞赛/课程提交 | **13** | ✅ 编译通过 |
-| [`journal/`](journal/) | **全六阶段** | 期刊/会议投稿底稿 | **15** | ✅ 编译通过 |
-| [`technical-report/`](technical-report/) | **全六阶段 + 研究历程 + 工程落地 + 复现手册** | 技术报告 / 内部归档 | **18** | ✅ 编译通过 |
+| [`journal/`](journal/) | **全六阶段** | 期刊/会议投稿底稿 | **33** | ✅ 编译通过 |
+| [`technical-report/`](technical-report/) | **全六阶段 + 研究历程 + 工程落地 + 复现手册** | 技术报告 / 内部归档 | **31** | ✅ 编译通过 |
 
-三份的**科学结论是同一套**（同一 central claim），差别在**覆盖范围与保留的材料**：
+**竞赛版已归档**：赛后重写版移到 `archive/paper_competition_rewrite/`（`\graphicspath` 指向 `paper/figures/`，归档后不能直接重编；保留交付 PDF 作冻结档）。真实的竞赛提交材料在 `archive/competition_2026/`。
 
-- **竞赛版**以 CIFAR-10 为主线（第一阶段的实际口径），保留探索过程与消融细节。
+两份在编稿的**科学结论是同一套**（同一 central claim），差别在**覆盖范围与保留的材料**：
+
 - **期刊版**严格问题驱动，Results 的每个小节标题都写成 **Answer**（不写"我们做了什么"）；
   含一节方法学内容（方差纪律与跨实现不可移植）。
 - **技术报告版**额外保留三类材料：**三次"先归因、后被自己否证"的完整链条**、
@@ -39,7 +39,7 @@ xelatex -interaction=nonstopmode main.tex   # 连续跑两次以解析交叉引�
 | [`storyline.md`](storyline.md) | REWRITE 模式 0 | **Central Claim** + Question–Experiment–Finding 映射表（17 条）+ Results 大纲 + Discussion 骨架 + Answerability Check |
 | [`results-outline.md`](results-outline.md) | REWRITE | 每个结果小节的 Question / Experiment / Data / Finding / 1-hop 五件套 |
 | [`discussion-notes.md`](discussion-notes.md) | REWRITE | 2-hop 综合、可迁移的一般原理、向外展开的问题空间、六条局限与对应未来工作 |
-| [`figure-plan.md`](figure-plan.md) | paper-form 模式 4 | 每张图的 claim / 数据来源 / 类型 / 三份稿件的用图分配 / 配色与规格 |
+| [`figure-plan.md`](figure-plan.md) | paper-form 模式 4 | 每张图的 claim / 数据来源 / 类型 / 两份在编稿（+ 已归档竞赛版）的用图分配 / 配色与规格 |
 | [`health-check-report.md`](health-check-report.md) | paper-form 模式 6 | 全文体检：事实性缺失 / 形式层 / 论证层三层报告 + **未能核查的项** |
 | [`format-checklist.md`](format-checklist.md) | paper-form 模式 5 | 格式检查清单（**目标载体未定，通用版**；含抓 guidelines 的标准流程） |
 
@@ -69,7 +69,7 @@ figures/
 
 （`<python>` 为本机的 conda `pytorch_env` 解释器。）
 
-三份稿件共用的视觉规范：Wong 8 色（色盲友好）、中文 SimHei、正/负侧固定配色映射、
+两份在编稿共用的视觉规范：Wong 8 色（色盲友好）、中文 SimHei、正/负侧固定配色映射、
 输出 PDF 矢量 + PNG 300 dpi。
 
 ---
@@ -89,9 +89,9 @@ figures/
 
 ## 五、已知的两处待人工处理
 
-1. **补参考文献**。三份稿件都只用了仓库既有的 8 篇；期刊版需要的
-   "对抗鲁棒性 / 表征可解码性 / 读出适配"三条文献线目前为空，需作者补齐。
+1. **补参考文献**。两份在编稿原先只用了仓库既有的 8 篇；现已补入 Nature 2020、AHWA-LoRA、DoRA、BN-only 等先行工作，
+   但“对抗鲁棒性 / 表征可解码性”两条线仍可继续补。
 2. **确定目标载体后替换格式**。`format-checklist.md` 的 B 段全部是占位项；
-   若目标为 Springer LNCS，仓库里已有 `llncs.cls` 全套模板可用。
+   若目标为 Springer LNCS，仓库里已有 `paper/templates/springer-lncs/` 全套模板可用。
 
 详见 `health-check-report.md` 的"未能核查的项"。

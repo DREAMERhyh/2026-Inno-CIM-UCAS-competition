@@ -27,7 +27,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from static_tex_check import run as static_run  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-PAPERS = ["journal", "technical-report", "competition", "advisor-summary"]
+PAPERS = ["journal", "technical-report", "advisor-summary"]
 # ⚠ 必须是 **Windows 绝对路径**。原先写的是 `/d/texlive/2025/bin/windows`（Git Bash 写法），
 #   Python 在 Windows 上根本不认这个目录 ⇒ env["PATH"] 里塞进去的是个无效条目，
 #   这个"强制 TeX Live 优先"的设定**一直是空操作**（能跑通只是因为 TeX Live 本来就在

@@ -14,13 +14,13 @@
 | [`论文v3.md`](论文v3.md) | 论文：九条结论的终版表述 + 方法 + 局限 + **12 条勘误** + 复现材料 |
 | [`experiments_ledger.md`](experiments_ledger.md) | 实验台账：§0–§16，每个实验的**预登记判据**与结果 |
 | [`docs/PROJECT_RETROSPECTIVE.md`](docs/PROJECT_RETROSPECTIVE.md) | **阶段史**：每个阶段"当初信什么、后来被什么推翻"；含三次"噪声→翻案"专题与新人上手 |
-| [`deploy_notes.md`](deploy_notes.md) | 部署推演：把结论映射到 CIM 数字后端，三档判定（可行 / 需改动 / 不可行） |
+| [`docs/reports/deploy_notes.md`](docs/reports/deploy_notes.md) | 部署推演：把结论映射到 CIM 数字后端，三档判定（可行 / 需改动 / 不可行） |
 
 **第七阶段新增的文档**（多会话协作，见 `docs/V7_COORDINATION.md`）
 
 | 文件 | 是什么 |
 |---|---|
-| [`paper/`](paper/) | 三份论文（竞赛 / 期刊 / 技术报告）+ 骨架与形式工作文件；`paper/README.md` 有索引 |
+| [`paper/`](paper/) | 论文（期刊 / 技术报告；竞赛版已归档到 `archive/`）+ 骨架与形式工作文件；`paper/README.md` 有索引 |
 | [`docs/V7_COORDINATION.md`](docs/V7_COORDINATION.md) | **多会话协调规则**：文件领地、并行上限、通信协议、已踩的坑（**动手前先读**） |
 | [`docs/V7_M4_RUNBOOK.md`](docs/V7_M4_RUNBOOK.md) | M4（深层主干方差）的收尾流程与预登记判据 |
 | [`docs/POSITIONING.md`](docs/POSITIONING.md) | 与先行工作的关系与差异化（LP-FT / CIM 数字域补偿 / 探针批判） |
@@ -203,7 +203,7 @@ CIFAR10/
 ├── task_extension6_eval_deep_robust.py
 ├── plot_cross_arch_summary.py
 ├── requirements.txt
-├── 原始题目+题目解读+研究思路.md
+├── docs/reports/原始题目+题目解读+研究思路+研究发现.md
 └── README.md
 ```
 

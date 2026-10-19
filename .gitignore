@@ -5,6 +5,16 @@ ucas-cod-lab-report/
 汇报文档+论文/演示视频.mp4
 汇报文档+论文/视频口述草稿.md
 Springer_Lecture_Notes_in_Computer_Science/
+# 2026-10-19 仓库整理后的新路径（旧路径保留，防回滚时失效）
+archive/competition_2026/演示视频.mp4
+archive/competition_2026/视频口述草稿.md
+paper/templates/springer-lncs/
+archive/paper_competition_rewrite/*.aux
+archive/paper_competition_rewrite/*.out
+archive/paper_competition_rewrite/*.toc
+archive/paper_competition_rewrite/*.synctex.gz
+# 改写工作区里的渲染检查图（只读截图，不是交付物；避免 `git add -A` 带入数 MB PNG）
+rewrite_work/*.png
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

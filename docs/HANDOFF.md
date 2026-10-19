@@ -1,5 +1,8 @@
 # 交接文档（快照：2026-09-26 11:40）
 
+> 🧭 **本文件没有被取代。** 2026-10-14 起多了一层**快车道**：`.claude/CONTEXT.md`（四问 + 红线 + 最贵的坑，≤120 行）——它**摘要**自本文件与 `V7_COORDINATION.md`，细节仍以这两份为准。
+> **改状态时两边一起看**：本文件的 §0 是详细正文，`.claude/CONTEXT.md` 的状态节是给跨项目协议用的四行摘录。**不一致时以实况为准，然后改 `.claude/CONTEXT.md`**（它的写入协议要求核证据）。
+
 > **本文件是某一时刻的快照，不是长期规则。**
 > **长期规则**看 `docs/V7_COORDINATION.md`（领地、红线、坑表、方法学纪律）。
 > **接手者先读这两份，再动手。**（`docs/V7_M4_RUNBOOK.md` 是 M4 的历史记录，M4 已完成）
@@ -10,14 +13,16 @@
 
 **快照：2026-09-26 23:0x**（本节由本轮总管 `claude-35 [d5897d]` 更新）
 
+> **2026-10-19 更新**：竞赛版 `paper/competition/` 已归档到 `archive/paper_competition_rewrite/`；在编稿为 journal **33 页** / technical-report **31 页** / advisor-summary **1 页**，检查器 EXIT=0。以 `.claude/CONTEXT.md` 与实况为准。
+
 | | |
 |---|---|
 | 仓库 | `d:\deeplearning_practice\存算一体` |
 | 阶段 | **第七阶段**（台账 §16） |
 | **在跑的任务** | **无** —— GPU 空闲、无 python 进程。**本轮没有启动任何训练** |
 | **最新改动** | ✅ **四个实验的成果已全部写进论文** + 新增一份导师评审摘要。详见 §9·补二 |
-| **论文** | ✅ **四份稿**、检查器 **EXIT=0**：journal **31 页** / technical-report **29 页** / competition **13 页**（未动）/ **advisor-summary 1 页（新）** |
-| **提交状态** | ✅ **工作区干净**。本轮两个提交：`719a3a9`（实验产物 + 台账）、`50bfe2b`（论文改动）。**未跟踪的只剩 2 个 ScreenHunter 取证文件**（非本项目产出，按纪律不碰） |
+| **论文** | ✅ **四份稿**、检查器 **EXIT=0**：journal **31 页** / technical-report **29 页** / competition **13 页**（未动）/ **advisor-summary 1 页（新）**　**（2026-10-19：competition 已归档；现行 33 / 31 / 1 页，见页首注记）** |
+| **提交状态** | ✅ **工作区干净**。本轮两个提交：`719a3a9`（实验产物 + 台账）、`50bfe2b`（论文改动）。**未跟踪的只剩 2 个 ScreenHunter 取证文件**（非本项目产出，按纪律不碰）　**（2026-09-26 当时；2026-10-19 整理中，尚未提交）** |
 | **外部审查** | 🔄 **已派给 `claude-d2 [4ba73b]`**（sessionId `e9278805`，**零对话历史 ⇒ 已核独立性**）。⚠ **第一版派错了人**（派给了论文作者、上一任总管），对方顶回并拒绝——见 §9·补二的"一次流程错误" |
 | **待用户决定** | ① **M14b 要不要补 2×max 的 seed** ② **M10 需不需要新数据集**（止损线 5） ③ **目标期刊**（定了才能做格式合规与中文弯引号统一） |
 | 内存 | 物理 16 GB；空闲时 **物理可用 5 GB+ / 提交可用 22 GB+** |
@@ -76,7 +81,7 @@ ls outputs_cifar100/extension6_deep_robust/resnet18_exp3_s4{3,4}/metrics.json
 powershell -NoProfile -Command "Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile','-File','d:\deeplearning_practice\存算一体\tools\v7_m4_watchdog.ps1' -WindowStyle Hidden"
 
 # 读出衔接脚本 —— ⚠ **已跑完并正常退出**（4/4 CSV 均在），下面仅供将来复用参考：
-tail -c 300 logs_v7_m4_readout.log      # 尾行应为 readout runner exited ...
+tail -c 300 logs/legacy/logs_v7_m4_readout.log      # 尾行应为 readout runner exited ...
 # 若有新的一批主干要补读出，改 tools/v7_m4_readout.ps1 里的 $runs 后重新拉起（幂等：已存在的 CSV 会跳过）：
 powershell -NoProfile -Command "Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile','-File','d:\deeplearning_practice\存算一体\tools\v7_m4_readout.ps1' -WindowStyle Hidden"
 ```
@@ -110,7 +115,7 @@ M4 的 `22.91±2.61` 是**主干种子**口径（固定读出 seed 42、换主�
 
 **完整记录**：台账 **§16.1**（闸门核验表、两种子原始值、执行偏差、产物清单）。
 **论文已同步**：局限 (2) 改写为"已补测"、`tab:nat` 口径段加 ③、三级可分辨性下界 `±0.39` → `±0.25`。
-**产物**：4 个读出 CSV（`…_bs{43,44}_ep24_…`）、`logs_v7_m4_readout.log`、`outputs_cifar100/v7_M4_audit/M4_EXECUTION_PLAN.md`。
+**产物**：4 个读出 CSV（`…_bs{43,44}_ep24_…`）、`logs/legacy/logs_v7_m4_readout.log`、`outputs_cifar100/v7_M4_audit/M4_EXECUTION_PLAN.md`。
 
 ### 历史存档：跑完之后的四步（**已完成，保留供回溯**）
 
@@ -144,7 +149,7 @@ M4 的 `22.91±2.61` 是**主干种子**口径（固定读出 seed 42、换主�
 
 | | |
 |---|---|
-| 三份稿 | journal **29 页** / technical-report **24 页** / competition **13 页** |
+| 三份稿 | journal **29 页** / technical-report **24 页** / competition **13 页**　**（2026-10-19：competition 已归档；现行 33 / 31 / 1 页）** |
 | 检查器 | ✅ **EXIT=0**（0 错误 / 0 未定义引用 / 0 markdown 残留）|
 | 修复轮次 | **A/B/C/D/E 五组 + 跨文档一致性 + 两次独立体检 + M4 同步**，共百余处 |
 | 工作树 | ✅ **已提交**：`1cf98a0`（M4 收尾）+ `88e78a1`（外部体检 36 处修复）。**未跟踪的只剩 6 个 `.err` 日志 + 2 个 ScreenHunter 取证文件**（见 §9，均非本项目产出）|
@@ -441,7 +446,7 @@ PYTHONIOENCODING=utf-8 /d/anaconda3/envs/pytorch_env/python tools/check_papers.p
 |---|---|---|
 | journal | **29 → 31 页** | §3.5 四条路径 → **五条**（新增 LP-FT + 表 `tab:lpft`）；§3.7 标题与结论修正（三点 → **四点**，$r$ −0.960 → **−0.934**，且**曲线已不单调**）；§3.8 `tab:pool` 三行 → **四行**（新增 ReLU 非负性） |
 | technical-report | **24 → 27 页** | 同名各处同步 + 新增 §5.4「收官补测：三项实验」+ 阶段表补第七阶段一行 |
-| competition | 13 页**未动** | 按赛题冻结（先前 M-4 裁决） |
+| competition | 13 页**未动** | 按赛题冻结（先前 M-4 裁决）；**2026-10-19 已归档到 `archive/paper_competition_rewrite/`** |
 | **advisor-summary** | **新增，1 页** | 给导师的入口文件；已纳入 `check_papers.py` |
 
 **三处改动都接在既有论证链的接口上**（不是硬塞）：journal §4.4 的开放问题原本就写着
