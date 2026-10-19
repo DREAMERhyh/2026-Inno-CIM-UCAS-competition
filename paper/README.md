@@ -9,8 +9,8 @@
 
 | 目录 | 覆盖范围 | 定位 | 页数 | 状态 |
 |---|---|---|---|---|
-| [`journal/`](journal/) | **全六阶段** | 期刊/会议投稿底稿 | **33** | ✅ 编译通过 |
-| [`technical-report/`](technical-report/) | **全六阶段 + 研究历程 + 工程落地 + 复现手册** | 技术报告 / 内部归档 | **31** | ✅ 编译通过 |
+| [`journal/`](journal/) | **全六阶段** | 期刊/会议投稿底稿 | **35** | ✅ 编译通过 |
+| [`technical-report/`](technical-report/) | **全六阶段 + 研究历程 + 工程落地 + 复现手册** | 技术报告 / 内部归档 | **33** | ✅ 编译通过 |
 
 **竞赛版已归档**：赛后重写版移到 `archive/paper_competition_rewrite/`（`\graphicspath` 指向 `paper/figures/`，归档后不能直接重编；保留交付 PDF 作冻结档）。真实的竞赛提交材料在 `archive/competition_2026/`。
 
