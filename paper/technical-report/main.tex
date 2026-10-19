@@ -98,9 +98,12 @@
 \end{tabular}
 
 \vspace{2pt}
-{\footnotesize 「小节数」为各节当前的小节个数（手维护，加小节时请同步更新）。
+\begin{minipage}{0.94\textwidth}
+\footnotesize
+「小节数」为各节当前的小节个数（手维护，加小节时请同步更新）。
 第二行此前写作「第 3.4 节（机制链）」——但 3.4 只是\textbf{单个}小节，
-机制链实为 3.4$\sim$3.9，已于 2026-09-26 改为区间。}
+机制链实为 3.4$\sim$3.9，已于 2026-09-26 改为区间。
+\end{minipage}
 \end{center}
 
 \textbf{本报告的性质}：它是一份\emph{归档}，不是一份投稿论文。
@@ -230,13 +233,16 @@ ResNet-18 & 11\,173\,962 / 11\,220\,132 & 17 & 0 & 有 & 残差变量 \\
 \end{tabular}
 
 \vspace{2pt}
-{\footnotesize $^\dagger$ 与 SimpleCNN 的差异有\textbf{两个变量}：容量（1.40M 对 0.25M）
+\begin{minipage}{0.94\textwidth}
+\footnotesize
+$^\dagger$ 与 SimpleCNN 的差异有\textbf{两个变量}：容量（1.40M 对 0.25M）
 与\textbf{第二次下采样位置}（SimpleCNN 的 conv4 在 $16\times16$、本主干在 $8\times8$），
 后者是 MACs 约束下的取舍。\par
 \textbf{参数量口径}：本表为\textbf{主干本体}，\textbf{不含}各实验配方里的
 \textbf{特征校准模块}（\texttt{FeatureCalibration}）。\textbf{含}校准模块时，
 VGG-11 与 ResNet-18 分别为 $9\,889\,796$（$9.89$\,M）与 $11\,919\,332$（$11.92$\,M），
-第 4 个容量档为 $1\,662\,340$（$1.66$\,M）——复现者按模型定义实例化得到的是后者。}
+第 4 个容量档为 $1\,662\,340$（$1.66$\,M）——复现者按模型定义实例化得到的是后者。
+\end{minipage}
 \end{table}
 
 产物目录按数据集分离：\texttt{outputs/}（CIFAR-10）与 \texttt{outputs\_cifar100/}（CIFAR-100）；
@@ -687,12 +693,15 @@ ResNet-18（Exp3）& 20.79 &  7.91 & \textbf{$-12.88$} \\
 \end{tabular}
 
 \vspace{2pt}
-{\footnotesize 两臂在同一次运行内、同一评估路径下测量；读出侧 seed 42。
+\begin{minipage}{0.94\textwidth}
+\footnotesize
+两臂在同一次运行内、同一评估路径下测量；读出侧 seed 42。
 LP 24\,ep / lr $10^{-2}$，FT 30\,ep / lr $10^{-3}$。
 \textbf{FT 的 batch 在 ResNet-18 一臂为 128、另两臂为 512}——
 512 是为“冻结主干前向 / 从头训练”选的，做\textbf{全模型反传}时该主干实测 $>13$\,min/epoch，故改小；
 这是\textbf{修配置}（lr 与 ep 保持预登记值），但读者应知道\textbf{这一格与另两格不同源}。
-数据：\path{outputs_cifar100/v7_m8c_lpft/}。}
+数据：\path{outputs_cifar100/v7_m8c_lpft/}。
+\end{minipage}
 \end{table}
 
 \paragraph{口径提醒。}
